@@ -89,3 +89,19 @@ class SeenOffer(Base):
     last_notified_price: Mapped[float] = mapped_column(Numeric(12, 2))
     notified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     watch: Mapped[SearchWatch] = relationship(back_populates="seen")
+
+
+class HuntOffer(Base):
+    """Ofertas da última varredura de uma busca (o painel lê daqui, sem bater no site)."""
+
+    __tablename__ = "hunt_offers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    watch_id: Mapped[int] = mapped_column(ForeignKey("search_watches.id"), index=True)
+    name: Mapped[str] = mapped_column(String(300))
+    merchant: Mapped[str] = mapped_column(String(100))
+    price: Mapped[float] = mapped_column(Numeric(12, 2))
+    capacity_gb: Mapped[int | None] = mapped_column(default=None)
+    lowering_pct: Mapped[float] = mapped_column(default=0.0)
+    url: Mapped[str] = mapped_column(String(1000))
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -2,12 +2,12 @@
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.aggregators import buscape
 from app.alerts import price_per_gb, should_alert
-from app.db.models import SearchWatch, SeenOffer
+from app.db.models import HuntOffer, SearchWatch, SeenOffer
 from app.notify.telegram import brl, send_telegram
 
 log = logging.getLogger("precim.search")
@@ -33,10 +33,21 @@ async def scan_search(session: Session, watch: SearchWatch) -> int:
         log.exception("busca falhou: %s", watch.query)
         return 0
 
+    hits = [
+        h for h in hits
+        if not watch.min_capacity_gb or (h.capacity_gb or 0) >= watch.min_capacity_gb
+    ]
+    session.execute(delete(HuntOffer).where(HuntOffer.watch_id == watch.id))
+    session.add_all(
+        HuntOffer(
+            watch_id=watch.id, name=h.name, merchant=h.merchant, price=h.price,
+            capacity_gb=h.capacity_gb, lowering_pct=h.lowering_pct, url=h.url,
+        )
+        for h in hits
+    )
+
     sent = 0
     for hit in hits:
-        if watch.min_capacity_gb and (hit.capacity_gb or 0) < watch.min_capacity_gb:
-            continue
         if not should_alert(
             hit.price,
             capacity_gb=hit.capacity_gb,

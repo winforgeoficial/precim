@@ -57,7 +57,8 @@ def parse_search_html(html: str, host: str = HOSTS[0]) -> list[Hit]:
         merchant = item.get("merchantName")
         if not merchant:
             count = item.get("storeCount") or 0
-            merchant = f"vários ({count} lojas)" if count else "vários"
+            plural = "loja" if count == 1 else "lojas"
+            merchant = f"vários ({count} {plural})" if count else "vários"
         hits.append(Hit(
             name=name,
             price=float(price),

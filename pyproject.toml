@@ -34,4 +34,4 @@ line-length = 100
 src = ["backend"]
 
 [tool.ruff.lint]
-extend-per-file-ignores = { "backend/app/main.py" = ["B008"] }
+extend-per-file-ignores = { "backend/app/main.py" = ["B008"], "backend/app/api.py" = ["B008"] }
