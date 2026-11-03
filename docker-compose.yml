@@ -1,0 +1,13 @@
+services:
+  precim:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - precim-data:/data
+    restart: unless-stopped
+
+volumes:
+  precim-data:
