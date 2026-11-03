@@ -10,7 +10,7 @@ conquistas). Abra `http://127.0.0.1:8000/` após `docker compose up`.
 
 Prontos: coleta direta da **Kabum**, busca por **Buscapé/Zoom** (cobre Amazon, Kabum e Magalu),
 histórico em SQLite e alertas no Telegram. **Pichau e Terabyte não aparecem nos agregadores e
-bloqueiam acesso automatizado** — ficam de fora por ora. Comandos do bot do Telegram: próxima fase.
+bloqueiam acesso automatizado** — ficam de fora por ora. **Bot do Telegram** com comandos (abaixo).
 
 ### Cadência anti-bloqueio
 As varreduras seguem um ciclo rotativo **30 → 50 → 60 min → volta** (mais alguns segundos aleatórios),
@@ -30,6 +30,21 @@ curl -X POST localhost:8000/api/watch -H 'content-type: application/json' \
 curl localhost:8000/api/watch
 ```
 Configure `PRECIM_TELEGRAM_TOKEN` e `PRECIM_TELEGRAM_CHAT_ID` no `.env` para receber os avisos.
+
+## Bot do Telegram
+1. No Telegram, fale com o **@BotFather**, crie um bot (`/newbot`) e copie o token para `PRECIM_TELEGRAM_TOKEN` no `.env`.
+2. Suba o precim e mande `/start` ao seu bot: ele responde com o **chat id**. Coloque em `PRECIM_TELEGRAM_CHAT_ID` e reinicie.
+3. Pronto: só esse chat consegue comandar o bot e receber alertas. Qualquer outro chat recebe "uso pessoal".
+
+| Comando | O que faz |
+|---|---|
+| `/resumo` | melhores ofertas agora |
+| `/cacar` | caça agora (espera de 5 min entre usos) |
+| `/lista` | caças (`c1`) e produtos (`p1`) acompanhados |
+| `/caca ssd nvme 1tb min=1000 alvo=700 rgb=0,6` | cria caça por busca |
+| `/url <link-kabum> Kingston A400 gb=480 alvo=450` | acompanha um produto |
+| `/alvo c1 650` | muda preço-alvo |
+| `/pausar c1` · `/retomar c1` · `/remover c1` | gerenciar |
 
 ## Rodar
 ```bash

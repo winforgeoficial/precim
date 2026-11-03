@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import api
+from app import api, services
 from app.db.models import Base, HuntOffer, Listing, PriceSnapshot, Product
 
 
@@ -24,7 +24,7 @@ def client():
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[api.get_db] = override
-    api._last_manual_hunt = None
+    services._last_manual_hunt = None
     c = TestClient(app)
     c.session_factory = Session
     return c

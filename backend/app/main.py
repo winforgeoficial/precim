@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.api import router
+from app.bot import start_bot, stop_bot
 from app.cadence import Cadence, parse_cycle
 from app.collector import scan_all
 from app.core.config import settings
@@ -49,7 +50,9 @@ async def lifespan(_: FastAPI):
     scheduler = AsyncIOScheduler()
     scheduler.start()
     _schedule_next(scheduler, Cadence(parse_cycle(settings.scan_cycle_minutes)))
+    bot = await start_bot()
     yield
+    await stop_bot(bot)
     scheduler.shutdown(wait=False)
 
 
