@@ -15,6 +15,8 @@ from app.core.config import settings
 from app.db.session import SessionLocal, init_db
 from app.search_collector import scan_all_searches
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # a URL do bot contém o token
 log = logging.getLogger("precim")
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
