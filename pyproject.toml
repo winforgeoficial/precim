@@ -32,3 +32,6 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.ruff]
 line-length = 100
 src = ["backend"]
+
+[tool.ruff.lint]
+extend-per-file-ignores = { "backend/app/main.py" = ["B008"] }

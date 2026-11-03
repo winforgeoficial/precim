@@ -5,7 +5,17 @@ brasileiras, guarda o histórico e avisa no Telegram quando algo entra em promo�
 valor que você definiu — com loja, preço, R$/GB e estoque.
 
 ## Status
-Fundação (fase 1). Coleta de lojas, bot do Telegram e painel vêm nas próximas fases.
+Fases 1–2 prontas: coleta da **Kabum**, histórico em SQLite, agendador e alertas no Telegram
+(envio simples via Bot API). Pichau e Terabyte estão atrás de Cloudflare/manutenção e entram com
+Playwright; painel web e comandos do bot vêm nas próximas fases.
+
+### Acompanhar um produto
+```bash
+curl -X POST localhost:8000/watch -H 'content-type: application/json' \
+  -d '{"url":"https://www.kabum.com.br/produto/...","name":"SSD 1TB","capacity_gb":1000,"target_price":400}'
+curl localhost:8000/watch
+```
+Configure `PRECIM_TELEGRAM_TOKEN` e `PRECIM_TELEGRAM_CHAT_ID` no `.env` para receber os avisos.
 
 ## Rodar
 ```bash
