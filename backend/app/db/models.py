@@ -62,3 +62,30 @@ class Alert(Base):
     active: Mapped[bool] = mapped_column(default=True)
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     product: Mapped[Product] = relationship(back_populates="alerts")
+
+
+class SearchWatch(Base):
+    """Busca em agregador (ex.: "ssd nvme 1tb") com regras de alerta."""
+
+    __tablename__ = "search_watches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    query: Mapped[str] = mapped_column(String(200))
+    min_capacity_gb: Mapped[int | None] = mapped_column(default=None)
+    target_price: Mapped[float | None] = mapped_column(Numeric(12, 2), default=None)
+    max_price_per_gb: Mapped[float | None] = mapped_column(default=None)
+    active: Mapped[bool] = mapped_column(default=True)
+    seen: Mapped[list["SeenOffer"]] = relationship(back_populates="watch")
+
+
+class SeenOffer(Base):
+    """Evita avisar de novo a mesma oferta (loja+produto) sem queda real de preço."""
+
+    __tablename__ = "seen_offers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    watch_id: Mapped[int] = mapped_column(ForeignKey("search_watches.id"), index=True)
+    key: Mapped[str] = mapped_column(String(400))
+    last_notified_price: Mapped[float] = mapped_column(Numeric(12, 2))
+    notified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    watch: Mapped[SearchWatch] = relationship(back_populates="seen")

@@ -1,4 +1,6 @@
+import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI, HTTPException
@@ -6,11 +8,15 @@ from pydantic import BaseModel, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.cadence import Cadence, parse_cycle
 from app.collector import scan_all, scan_listing
 from app.core.config import settings
-from app.db.models import Alert, Listing, PriceSnapshot, Product
+from app.db.models import Alert, Listing, PriceSnapshot, Product, SearchWatch
 from app.db.session import SessionLocal, get_session, init_db
+from app.search_collector import scan_all_searches
 from app.stores.registry import store_for_url
+
+log = logging.getLogger("precim")
 
 
 def _db():
@@ -18,20 +24,37 @@ def _db():
         yield session
 
 
-async def _scheduled_scan() -> None:
+async def _scan_everything() -> None:
     with SessionLocal() as session:
         await scan_all(session)
+        await scan_all_searches(session)
+
+
+def _schedule_next(scheduler: AsyncIOScheduler, cadence: Cadence) -> None:
+    delay = cadence.next_delay_seconds()
+    log.info("próxima varredura em %.0f min", delay / 60)
+    scheduler.add_job(
+        _run_and_reschedule, "date",
+        run_date=datetime.now(timezone.utc) + timedelta(seconds=delay),
+        args=[scheduler, cadence],
+    )
+
+
+async def _run_and_reschedule(scheduler: AsyncIOScheduler, cadence: Cadence) -> None:
+    try:
+        await _scan_everything()
+    except Exception:
+        log.exception("varredura falhou")
+    finally:  # sempre agenda a próxima, mesmo após erro
+        _schedule_next(scheduler, cadence)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        _scheduled_scan, "interval", minutes=settings.scan_interval_minutes, jitter=120,
-        max_instances=1, coalesce=True,
-    )
     scheduler.start()
+    _schedule_next(scheduler, Cadence(parse_cycle(settings.scan_cycle_minutes)))
     yield
     scheduler.shutdown(wait=False)
 
@@ -90,3 +113,20 @@ def list_watch(session: Session = Depends(_db)) -> list[dict]:
             "in_stock": last.in_stock if last else None,
         })
     return out
+
+
+class SearchIn(BaseModel):
+    query: str
+    min_capacity_gb: int | None = None
+    target_price: float | None = None
+    max_price_per_gb: float | None = None
+
+
+@app.post("/search-watch", status_code=201)
+def add_search_watch(body: SearchIn, session: Session = Depends(_db)) -> dict:
+    if body.target_price is None and body.max_price_per_gb is None:
+        raise HTTPException(422, "Informe target_price ou max_price_per_gb")
+    watch = SearchWatch(**body.model_dump())
+    session.add(watch)
+    session.commit()
+    return {"id": watch.id}
