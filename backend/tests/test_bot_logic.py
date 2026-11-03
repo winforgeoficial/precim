@@ -163,4 +163,14 @@ def test_aplicacao_registra_todos_os_comandos(monkeypatch):
     monkeypatch.setattr(bot.settings, "telegram_token", "123456:ABC-fake")
     app = bot.build_application()
     names = {c for h in app.handlers[0] for c in getattr(h, "commands", [])}
-    assert names >= {n for n, _ in bot.COMMANDS} | {"start"}
+    assert names >= {n for n, _ in bot.COMMANDS} | {"start", "id"}
+
+
+@pytest.mark.asyncio
+async def test_id_responde_para_qualquer_chat(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(bot.settings, "telegram_chat_id", "123")
+    update, msg = _update(-100999)
+    await bot.chat_id_cmd(update, SimpleNamespace())
+    assert "-100999" in msg.sent[0]

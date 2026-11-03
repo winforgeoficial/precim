@@ -45,6 +45,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _reply(update, "Este bot é de uso pessoal. 🔒")
 
 
+async def chat_id_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Responde o id do chat para qualquer um. O id não é segredo e não dá acesso a nada."""
+    chat = update.effective_chat
+    if chat:
+        await _reply(update, f"Chat id: <code>{chat.id}</code>")
+
+
 def _guarded(fn: Callable[..., Awaitable[str]]):
     async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat = update.effective_chat
@@ -92,6 +99,7 @@ async def _url(session, args) -> str:
 def build_application() -> Application:
     app = Application.builder().token(settings.telegram_token).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("id", chat_id_cmd))
     table: dict[str, Callable[..., Awaitable[str]]] = {
         "ajuda": _ajuda, "lista": _lista, "resumo": _resumo, "cacar": _cacar, "url": _url,
         "caca": _sync(bot_logic.cmd_caca), "alvo": _sync(bot_logic.cmd_alvo),
