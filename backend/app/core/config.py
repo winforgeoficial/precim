@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
     scan_cycle_minutes: str = "60"  # minutos entre varreduras do Buscapé/Zoom (aceita ciclo: "30,50,60")
     amazon_enabled: bool = True  # coleta direta da Amazon por navegador automatizado
+    aliexpress_enabled: bool = True  # coleta do AliExpress (preço aproximado)
     chromium_path: str = ""  # opcional: caminho de um Chromium já instalado
     user_agent: str = "precim/0.1 (uso pessoal)"
 

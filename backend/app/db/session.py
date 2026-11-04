@@ -18,6 +18,7 @@ _ADDED_COLUMNS = [
     ("hunt_offers", "source", "VARCHAR(20) NOT NULL DEFAULT 'buscape'"),
     ("hunt_offers", "verified", "BOOLEAN NOT NULL DEFAULT 0"),
     ("hunt_offers", "in_stock", "BOOLEAN"),
+    ("hunt_offers", "approximate", "BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

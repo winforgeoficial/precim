@@ -17,7 +17,12 @@ from app.db.models import (
     SeenOffer,
 )
 from app.db.session import SessionLocal
-from app.search_collector import scan_direct_amazon, scan_direct_kabum, scan_search
+from app.search_collector import (
+    scan_direct_aliexpress,
+    scan_direct_amazon,
+    scan_direct_kabum,
+    scan_search,
+)
 from app.stores.registry import store_for_url
 
 MANUAL_HUNT_COOLDOWN = timedelta(minutes=5)  # respeita o anti-bot dos sites
@@ -150,6 +155,7 @@ def build_hunt(session: Session) -> list[dict]:
                 "capacity_gb": o.capacity_gb, "price_per_gb": price_per_gb(price, o.capacity_gb),
                 "lowering_pct": o.lowering_pct, "url": o.url, "query": watch.query,
                 "source": o.source, "verified": o.verified, "in_stock": o.in_stock,
+                "approximate": o.approximate,
                 "seen_at": iso(o.seen_at),
                 "is_deal": should_alert(
                     price, capacity_gb=o.capacity_gb,
@@ -191,3 +197,4 @@ async def rescan_watch(watch_id: int) -> None:
             await scan_search(session, watch)
             await scan_direct_kabum(session, watch, force=True)
             await scan_direct_amazon(session, watch, force=True)
+            await scan_direct_aliexpress(session, watch, force=True)

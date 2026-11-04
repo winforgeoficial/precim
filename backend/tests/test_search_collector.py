@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app import search_collector
 from app.aggregators.buscape import Hit
-from app.db.models import Base, SearchWatch, SeenOffer
+from app.db.models import Base, HuntOffer, SearchWatch, SeenOffer
 
 
 @pytest.fixture
@@ -84,3 +84,28 @@ async def test_todas_as_buscas_falham_retorna_none(monkeypatch):
 
     monkeypatch.setattr(search_collector.buscape, "search", fake_search)
     assert await search_collector._collect("a | b") is None
+
+
+@pytest.mark.asyncio
+async def test_limite_de_alertas_por_varredura_e_ordem_por_rgb(session, monkeypatch):
+    sent = []
+
+    async def fake_send(text):
+        sent.append(text)
+        return True
+
+    monkeypatch.setattr(search_collector, "send_telegram", fake_send)
+    watch = SearchWatch(query="ssd", target_price=900)
+    session.add(watch)
+    session.commit()
+    hits = [Hit(name=f"SSD {i}", price=100 + i * 10, merchant="K", url=f"u{i}", capacity_gb=1000,
+                verified=True) for i in range(8)]
+    hits.reverse()  # chegam do mais caro ao mais barato
+
+    n = await search_collector._store_and_alert(session, watch, "kabum", hits)
+    assert n == search_collector.MAX_ALERTS_PER_SCAN == 5 and len(sent) == 5
+    assert "SSD 0" in sent[0] and "SSD 4" in sent[-1]  # os 5 mais baratos, do melhor ao pior
+    assert session.query(HuntOffer).count() == 8  # todas continuam no painel
+
+    n2 = await search_collector._store_and_alert(session, watch, "kabum", hits)
+    assert n2 == 3  # as 3 restantes saem na varredura seguinte; as 5 já avisadas não repetem

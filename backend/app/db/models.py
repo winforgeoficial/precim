@@ -107,4 +107,5 @@ class HuntOffer(Base):
     source: Mapped[str] = mapped_column(String(20), default="buscape")  # buscape | kabum
     verified: Mapped[bool] = mapped_column(default=False)  # conferida direto na loja
     in_stock: Mapped[bool | None] = mapped_column(default=None)
+    approximate: Mapped[bool] = mapped_column(default=False)  # preço pode ser de outra opção
     seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

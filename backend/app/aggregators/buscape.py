@@ -10,9 +10,13 @@ import httpx
 from app.core.config import settings
 
 _NEXT = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.DOTALL)
-# número + unidade; aceita "1.000GB" (milhar), "1,5TB"; ignora "GB/s" e colados em outras palavras
+# número + unidade; aceita "1.000GB" (milhar), "1,5TB", "250GB/500GB"; ignora "GB/s" e colados
+# em outras palavras. Com unidade curta ("128G", "2T") para títulos de marketplace.
 _CAPACITY = re.compile(
-    r"(?<![\d.,])(\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s*(tb|gb)(?![\w/])", re.IGNORECASE)
+    r"(?<![\d.,])(\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s*(tb|gb)(?![\w])(?!/s\b)", re.IGNORECASE)
+_CAPACITY_SHORT = re.compile(
+    r"(?<![\d.,])(\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s*(tb?|gb?)(?![\w])(?!/s\b)",
+    re.IGNORECASE)
 _THOUSANDS = re.compile(r"\d{1,3}(?:\.\d{3})+")
 MIN_PLAUSIBLE_GB, MAX_PLAUSIBLE_GB = 16, 100_000
 HOSTS = ("https://www.buscape.com.br", "https://www.zoom.com.br")  # reserva: Zoom
@@ -32,6 +36,7 @@ class Hit:
     lowering_pct: float = 0.0
     source: str = "buscape"
     verified: bool = False  # True só quando conferida direto na loja
+    approximate: bool = False  # preço da loja pode ser de outra opção (ex.: AliExpress)
     in_stock: bool | None = None
 
     @property
@@ -39,17 +44,24 @@ class Hit:
         return f"{self.merchant}|{self.name}".lower()
 
 
-def parse_capacity_gb(name: str) -> int | None:
-    """Maior capacidade plausível citada no título (1TB = 1000 GB; "1.000GB 1TB" = 1000)."""
+def all_capacities_gb(name: str, short_units: bool = False) -> list[int]:
+    """Todas as capacidades plausíveis citadas no título, sem repetir, em GB (1TB = 1000)."""
     found: list[int] = []
-    for m in _CAPACITY.finditer(name):
+    pattern = _CAPACITY_SHORT if short_units else _CAPACITY
+    for m in pattern.finditer(name):
         raw = m.group(1)
         value = float(raw.replace(".", "")) if _THOUSANDS.fullmatch(raw) else float(
             raw.replace(",", "."))
-        gb = int(value * 1000) if m.group(2).lower() == "tb" else int(value)
-        if MIN_PLAUSIBLE_GB <= gb <= MAX_PLAUSIBLE_GB:
+        gb = int(value * 1000) if m.group(2).lower().startswith("t") else int(value)
+        if MIN_PLAUSIBLE_GB <= gb <= MAX_PLAUSIBLE_GB and gb not in found:
             found.append(gb)
-    return max(found) if found else None
+    return found
+
+
+def parse_capacity_gb(name: str) -> int | None:
+    """Maior capacidade plausível citada no título (1TB = 1000 GB; "1.000GB 1TB" = 1000)."""
+    caps = all_capacities_gb(name)
+    return max(caps) if caps else None
 
 
 def parse_search_html(html: str, host: str = HOSTS[0]) -> list[Hit]:

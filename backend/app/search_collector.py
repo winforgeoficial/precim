@@ -19,15 +19,20 @@ from app.core.config import settings
 from app.db.models import HuntOffer, SearchWatch, SeenOffer
 from app.matching import matches_terms
 from app.notify.telegram import brl, send_telegram
-from app.stores import amazon, kabum_catalog
+from app.stores import aliexpress, amazon, kabum_catalog
 
 log = logging.getLogger("precim.search")
 QUERY_PAUSE_SECONDS = (3.0, 6.0)  # pausa entre consultas da mesma caça (anti-bot)
+MAX_ALERTS_PER_SCAN = 5  # evita enxurrada no grupo; o resto sai nas próximas varreduras
 MIN_REDROP_PCT = 3.0  # só re-avisa a mesma oferta se cair ao menos isso
 DIRECT_INTERVAL = timedelta(hours=3)  # coletas diretas são mais pesadas: não rodam a cada varredura
 DUE_SLACK = timedelta(minutes=15)  # varreduras horárias têm jitter; sem folga a coleta pularia p/ 4 h
 
 VERIFIED_NOTE = "✅ Conferida direto na loja"
+APPROXIMATE_NOTE = (
+    "⚠️ Preço aproximado: o AliExpress mostra o valor da opção mais barata do anúncio. "
+    "Desconfie de marcas desconhecidas: SSD com capacidade falsificada é comum."
+)
 
 
 def format_hit(hit: buscape.Hit) -> str:
@@ -41,6 +46,8 @@ def format_hit(hit: buscape.Hit) -> str:
     if hit.in_stock is not None:
         lines.append("📦 Em estoque" if hit.in_stock else "⛔ Sem estoque")
     lines.append(VERIFIED_NOTE)  # só ofertas conferidas chegam ao Telegram
+    if hit.approximate:
+        lines.append(APPROXIMATE_NOTE)
     lines.append(hit.url)
     return "\n".join(lines)
 
@@ -75,12 +82,17 @@ async def _store_and_alert(session: Session, watch: SearchWatch, source: str,
             watch_id=watch.id, name=h.name, merchant=h.merchant, price=h.price,
             capacity_gb=h.capacity_gb, lowering_pct=h.lowering_pct, url=h.url,
             source=h.source, verified=h.verified, in_stock=h.in_stock,
+            approximate=h.approximate,
         )
         for h in hits
     )
 
     sent = 0
-    for hit in hits:
+    # melhores R$/GB primeiro: se houver limite, vão ao grupo as mais interessantes
+    for hit in sorted(hits, key=lambda h: (price_per_gb(h.price, h.capacity_gb) is None,
+                                           price_per_gb(h.price, h.capacity_gb) or 0)):
+        if sent >= MAX_ALERTS_PER_SCAN:
+            break
         if not hit.verified:  # Buscapé/Zoom: só aparece no painel, nunca vai ao grupo
             continue
         if hit.in_stock is False:  # sem estoque confirmado: lista, mas não avisa
@@ -158,24 +170,37 @@ async def scan_direct_kabum(session: Session, watch: SearchWatch, force: bool = 
     return await _store_and_alert(session, watch, "kabum", hits)
 
 
-async def scan_direct_amazon(session: Session, watch: SearchWatch, force: bool = False) -> int:
-    """Fonte 3: lê a busca da Amazon com navegador (a cada 3 h, ou com force)."""
-    if not settings.amazon_enabled or amazon.blocked_now():
+async def _scan_browser_source(session: Session, watch: SearchWatch, source: str, module,
+                               enabled: bool, force: bool) -> int:
+    """Fontes lidas por navegador (Amazon, AliExpress): a cada 3 h, ou com force."""
+    if not enabled or module.blocked_now():
         return 0
-    if not force and not _direct_is_due(session, watch, "amazon"):
+    if not force and not _direct_is_due(session, watch, source):
         return 0
     queries = split_queries(watch.query)
     try:
-        hits = await amazon.search(queries)
+        hits = await module.search(queries)
     except Exception:
-        log.exception("coleta da Amazon falhou")
+        log.exception("coleta de %s falhou", source)
         return 0
     hits = [h for h in hits
             if (not watch.min_capacity_gb or (h.capacity_gb or 0) >= watch.min_capacity_gb)
             and matches_terms(h.name, queries)]
     if not hits:  # bloqueio ou nada relevante: não apaga o que já havia
         return 0
-    return await _store_and_alert(session, watch, "amazon", hits)
+    return await _store_and_alert(session, watch, source, hits)
+
+
+async def scan_direct_amazon(session: Session, watch: SearchWatch, force: bool = False) -> int:
+    """Fonte 3: busca da Amazon lida com navegador."""
+    return await _scan_browser_source(
+        session, watch, "amazon", amazon, settings.amazon_enabled, force)
+
+
+async def scan_direct_aliexpress(session: Session, watch: SearchWatch, force: bool = False) -> int:
+    """Fonte 4: busca do AliExpress lida com navegador (preço aproximado)."""
+    return await _scan_browser_source(
+        session, watch, "aliexpress", aliexpress, settings.aliexpress_enabled, force)
 
 
 async def scan_all_searches(session: Session) -> int:
@@ -185,4 +210,5 @@ async def scan_all_searches(session: Session) -> int:
         sent += await scan_search(session, w)
         sent += await scan_direct_kabum(session, w)
         sent += await scan_direct_amazon(session, w)
+        sent += await scan_direct_aliexpress(session, w)
     return sent

@@ -51,7 +51,7 @@ export default function Hunt({ data, onRefresh }: Props) {
             Só conferidas na loja ({verifiedCount} de {all.length})
           </label>
           <span className="text-ink/70">
-            <b>✅ conferida</b>: preço lido direto na loja · <b>⚠️ não verificada</b>: vem do Buscapé e pode já não existir.
+            <b>✅ conferida</b>: preço lido direto na loja · <b>≈ aproximado</b>: AliExpress mostra o valor da opção mais barata · <b>⚠️ não verificada</b>: vem do Buscapé e pode já não existir.
           </span>
         </div>
       )}
@@ -76,6 +76,10 @@ export default function Hunt({ data, onRefresh }: Props) {
                     <span className="rounded-full border-2 border-ink bg-white px-2 text-xs font-bold" title="Preço lido direto na página da loja">✅ conferida</span>
                   ) : (
                     <span className="rounded-full border-2 border-ink bg-gold/60 px-2 text-xs font-bold" title="Preço vindo do Buscapé/Zoom. A oferta pode já não existir na loja.">⚠️ não verificada</span>
+                  )}
+                  {o.approximate && (
+                    <span className="rounded-full border-2 border-ink bg-gold/60 px-2 text-xs font-bold"
+                          title="O AliExpress mostra o preço da opção mais barata do anúncio (outra capacidade ou cor). Confira a opção antes de comprar.">≈ preço aproximado</span>
                   )}
                   {o.in_stock === false && <span className="rounded-full border-2 border-ink bg-pig/40 px-2 text-xs font-bold">⛔ sem estoque</span>}
                   {o.in_stock === true && <span className="rounded-full border-2 border-ink bg-white px-2 text-xs font-bold">📦 em estoque</span>}

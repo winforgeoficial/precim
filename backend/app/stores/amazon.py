@@ -4,10 +4,7 @@ Sem disfarce: o navegador se apresenta normalmente, com poucas páginas e pausas
 Se a Amazon mostrar captcha/robô, o precim PARA por 12 h (não tenta contornar).
 """
 
-import asyncio
 import logging
-import os
-import random
 import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote_plus
@@ -15,7 +12,7 @@ from urllib.parse import quote_plus
 from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from app.aggregators.buscape import Hit, parse_capacity_gb
-from app.core.config import settings
+from app.browser import render_pages
 
 log = logging.getLogger("precim.amazon")
 SEARCH_URL = "https://www.amazon.com.br/s?k={q}"
@@ -86,36 +83,17 @@ async def search(queries: list[str]) -> list[Hit]:
     if blocked_now():
         log.info("Amazon em pausa por bloqueio até %s", _blocked_until)
         return []
-    from playwright.async_api import async_playwright  # import tardio: só quem usa paga
-
+    urls = [SEARCH_URL.format(q=quote_plus(q)) for q in queries[:MAX_QUERIES_PER_CRAWL]]
+    pages, was_blocked = await render_pages(
+        urls, pause=PAGE_PAUSE_SECONDS, blocked=lambda pg: is_blocked(pg.html))
+    if was_blocked:
+        _blocked_until = datetime.now(timezone.utc) + BLOCK_COOLDOWN
+        log.warning("Amazon pediu verificação: pausando a coleta por 12 h")
     merged: dict[str, Hit] = {}
-    launch: dict = {"headless": True}
-    if settings.chromium_path:
-        launch["executable_path"] = settings.chromium_path
-    if hasattr(os, "geteuid") and os.geteuid() == 0:  # contêiner roda como root
-        launch["args"] = ["--no-sandbox", "--disable-dev-shm-usage"]
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(**launch)
+    for pg in pages:
         try:
-            ctx = await browser.new_context(
-                locale="pt-BR", timezone_id="America/Sao_Paulo",
-                viewport={"width": 1366, "height": 850})
-            page = await ctx.new_page()
-            for i, q in enumerate(queries[:MAX_QUERIES_PER_CRAWL]):
-                if i:
-                    await asyncio.sleep(random.uniform(*PAGE_PAUSE_SECONDS))
-                try:
-                    await page.goto(SEARCH_URL.format(q=quote_plus(q)),
-                                    wait_until="domcontentloaded", timeout=60_000)
-                    await page.wait_for_timeout(3000)
-                    for hit in parse_search_html(await page.content()):
-                        merged.setdefault(hit.url, hit)
-                except Blocked:
-                    _blocked_until = datetime.now(timezone.utc) + BLOCK_COOLDOWN
-                    log.warning("Amazon pediu verificação: pausando a coleta por 12 h")
-                    break
-                except Exception:  # navegador/rede: só essa busca falha
-                    log.exception("busca na Amazon falhou: %s", q)
-        finally:
-            await browser.close()
+            for hit in parse_search_html(pg.html):
+                merged.setdefault(hit.url, hit)
+        except Blocked:  # defesa extra; render_pages já filtra
+            break
     return list(merged.values())

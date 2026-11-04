@@ -2,7 +2,7 @@ export type Offer = {
   name: string; merchant: string; price: number; capacity_gb: number | null;
   price_per_gb: number | null; lowering_pct: number; url: string; query: string;
   seen_at: string; is_deal: boolean; quality: number | null;
-  source: string; verified: boolean; in_stock: boolean | null;
+  source: string; verified: boolean; in_stock: boolean | null; approximate: boolean;
 };
 export type Hunt = { offers: Offer[]; last_scan: string | null };
 export type Tracked = {

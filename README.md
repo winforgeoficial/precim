@@ -22,10 +22,19 @@ terceiros) já não existem na loja. Por isso cada oferta é rotulada:
   disfarce**: se a Amazon pedir captcha/verificação, a coleta **para por 12 h** (não há tentativa de
   contornar). Os termos de uso da Amazon proíbem acesso automatizado — o uso é por sua conta e risco.
   Desligue com `PRECIM_AMAZON_ENABLED=false`. O preço pode ser de vendedor terceiro.
+- **≈ preço aproximado (AliExpress)** — lido da busca renderizada (mesmo método da Amazon, 3 h,
+  pausa de 12 h se pedir verificação). O AliExpress mostra o preço da **opção mais barata** do
+  anúncio; por isso, em títulos com várias capacidades ("128G … 1TB 2TB") vale a **menor**. Mesmo
+  assim confira a opção, e desconfie de marcas desconhecidas (SSD com capacidade falsificada é comum).
 - **⚠️ não verificada** — veio do Buscapé; pode já não estar disponível. O painel tem o filtro
   "Só conferidas na loja" e o Telegram avisa isso em cada mensagem.
 
 Só ofertas **conferidas** são enviadas ao Telegram; as do Buscapé aparecem apenas no painel.
+
+Cada varredura envia no máximo **5 alertas** (os de menor R$/GB); o resto sai nas seguintes.
+
+Testados e descartados: Mercado Livre, Pichau, Casas Bahia e Pelando (bloqueiam), Shopee (sem preço sem
+login), Promobit (robots.txt proíbe a busca) e Americanas (a busca devolve notebooks, não SSDs).
 
 O precim **não clica** nos links de redirecionamento do Buscapé para checar ofertas (são links de
 anúncio pago).
