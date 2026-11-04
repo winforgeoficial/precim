@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { api, brl, type Hunt as HuntData, type Source } from "../api";
+import { useEffect, useState } from "react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { api, brl, type HistoryPoint, type Hunt as HuntData, type Offer, type Source } from "../api";
 import Thermometer from "../components/Thermometer";
 
 type Props = { data: HuntData | null; sources: Source[]; onRefresh: () => void };
@@ -25,10 +26,40 @@ function SourceChips({ sources }: { sources: Source[] }) {
   );
 }
 
+function OfferHistory({ offer }: { offer: Offer }) {
+  const [points, setPoints] = useState<HistoryPoint[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.offerHistory(offer.watch_id, offer.key).then((p) => alive && setPoints(p)).catch(() => alive && setPoints([]));
+    return () => { alive = false; };
+  }, [offer.watch_id, offer.key]);
+  const chart = (points ?? []).map((p) => ({
+    label: new Date(p.at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), price: p.price,
+  }));
+  return (
+    <div className="mt-2 h-44 w-full basis-full" role="img" aria-label="Gráfico do histórico de preços da oferta">
+      {points === null ? <p className="py-6 text-center text-sm">Carregando…</p> : chart.length < 2 ? (
+        <p className="py-6 text-center text-sm text-ink/70">Poucos pontos ainda — o gráfico aparece quando o preço mudar ou nas próximas varreduras.</p>
+      ) : (
+        <ResponsiveContainer>
+          <LineChart data={chart}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#3b2a2a22" />
+            <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+            <YAxis domain={["auto", "auto"]} tick={{ fontSize: 12 }} width={64} tickFormatter={(v) => `R$${v}`} />
+            <Tooltip formatter={(v: number) => brl(v)} />
+            <Line type="stepAfter" dataKey="price" stroke="#e8738c" strokeWidth={3} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
+}
+
 export default function Hunt({ data, sources, onRefresh }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [onlyVerified, setOnlyVerified] = useState(false);
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   async function run() {
     setBusy(true);
@@ -105,6 +136,17 @@ export default function Hunt({ data, sources, onRefresh }: Props) {
                     <span className="rounded-full border-2 border-ink bg-gold/60 px-2 text-xs font-bold"
                           title="O AliExpress mostra o preço da opção mais barata do anúncio (outra capacidade ou cor). Confira a opção antes de comprar.">≈ preço aproximado</span>
                   )}
+                  {o.suspect && (
+                    <span className="rounded-full border-2 border-ink bg-pig/50 px-2 text-xs font-bold"
+                          title="R$/GB abaixo de metade da mediana das lojas conferidas. Costuma ser capacidade falsificada ou preço de outra opção. Não gera alerta.">⚠️ preço suspeito</span>
+                  )}
+                  {o.is_lowest && (
+                    <span className="rounded-full border-2 border-ink bg-gold/60 px-2 text-xs font-bold" title="Menor preço registrado para esta oferta">🏆 menor preço visto</span>
+                  )}
+                  {o.fake_discount && (
+                    <span className="rounded-full border-2 border-ink bg-pig/40 px-2 text-xs font-bold"
+                          title="O “preço antigo” informado pela loja nunca apareceu no histórico do precim.">🤨 desconto duvidoso</span>
+                  )}
                   {o.in_stock === false && <span className="rounded-full border-2 border-ink bg-pig/40 px-2 text-xs font-bold">⛔ sem estoque</span>}
                   {o.in_stock === true && <span className="rounded-full border-2 border-ink bg-white px-2 text-xs font-bold">📦 em estoque</span>}
                 </div>
@@ -119,7 +161,13 @@ export default function Hunt({ data, sources, onRefresh }: Props) {
                 </p>
               </div>
               <Thermometer quality={o.quality} />
+              <button className="btn-ghost" aria-expanded={openKey === `${o.watch_id}|${o.key}`}
+                      onClick={() => setOpenKey(openKey === `${o.watch_id}|${o.key}` ? null : `${o.watch_id}|${o.key}`)}>
+                📈 histórico{o.low_price != null && o.high_price != null && o.high_price > o.low_price
+                  ? ` (${brl(o.low_price)} – ${brl(o.high_price)})` : ""}
+              </button>
               <a className="btn-ghost" href={o.url} target="_blank" rel="noreferrer noopener">Ver loja ↗</a>
+              {openKey === `${o.watch_id}|${o.key}` && <OfferHistory offer={o} />}
             </li>
           ))}
         </ul>

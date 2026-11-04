@@ -122,3 +122,15 @@ class SourceStatus(Base):
     consecutive_failures: Mapped[int] = mapped_column(default=0)
     last_error: Mapped[str | None] = mapped_column(String(300), default=None)
     warned: Mapped[bool] = mapped_column(default=False)  # já avisei no Telegram desta sequência
+
+
+class OfferPrice(Base):
+    """Histórico de preço de cada oferta (por caça + chave loja|nome): gráfico e promoção falsa."""
+
+    __tablename__ = "offer_prices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    watch_id: Mapped[int] = mapped_column(ForeignKey("search_watches.id"), index=True)
+    key: Mapped[str] = mapped_column(String(400), index=True)
+    price: Mapped[float] = mapped_column(Numeric(12, 2))
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

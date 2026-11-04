@@ -6,3 +6,4 @@ data
 .git
 .env
 __pycache__
+backups

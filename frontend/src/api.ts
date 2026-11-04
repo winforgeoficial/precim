@@ -3,6 +3,8 @@ export type Offer = {
   price_per_gb: number | null; lowering_pct: number; url: string; query: string;
   seen_at: string; is_deal: boolean; quality: number | null;
   source: string; verified: boolean; in_stock: boolean | null; approximate: boolean;
+  suspect: boolean; watch_id: number; key: string; history_points: number;
+  low_price: number | null; high_price: number | null; is_lowest: boolean; fake_discount: boolean;
 };
 export type Hunt = { offers: Offer[]; last_scan: string | null };
 export type Tracked = {
@@ -25,7 +27,7 @@ export type Mascot = {
   mood: "sleep" | "sniff" | "party"; achievements: Achievement[];
   stats: { scans: number; alerts_sent: number; tracked: number };
 };
-export type HistoryPoint = { at: string; price: number; old_price: number | null };
+export type HistoryPoint = { at: string; price: number; old_price?: number | null };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -46,6 +48,8 @@ export const api = {
   sources: () => call<Source[]>("/api/sources"),
   mascot: () => call<Mascot>("/api/mascot"),
   tracked: () => call<Tracked[]>("/api/watch"),
+  offerHistory: (watchId: number, key: string) =>
+    call<HistoryPoint[]>(`/api/hunt/history?watch_id=${watchId}&key=${encodeURIComponent(key)}`),
   history: (id: number) => call<HistoryPoint[]>(`/api/watch/${id}/history`),
   addTracked: (body: Record<string, unknown>) =>
     call<{ listing_id: number; price: number | null }>("/api/watch", { method: "POST", body: JSON.stringify(body) }),

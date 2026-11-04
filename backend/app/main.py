@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 
 from app.api import router
+from app.backup import backup_if_needed
 from app.bot import start_bot, stop_bot
 from app.cadence import Cadence, parse_cycle
 from app.collector import scan_all
@@ -70,6 +71,8 @@ async def lifespan(_: FastAPI):
     init_db()
     scheduler = AsyncIOScheduler()
     scheduler.start()
+    backup_if_needed()
+    scheduler.add_job(backup_if_needed, "interval", hours=6, id="backup")
     cadence = Cadence(parse_cycle(settings.scan_cycle_minutes))
     _schedule_next(scheduler, cadence, _first_delay_seconds(cadence))
     bot = await start_bot()

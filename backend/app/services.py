@@ -5,18 +5,21 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import history
 from app.alerts import price_per_gb, should_alert
 from app.collector import scan_listing
 from app.db.models import (
     Alert,
     HuntOffer,
     Listing,
+    OfferPrice,
     PriceSnapshot,
     Product,
     SearchWatch,
     SeenOffer,
 )
 from app.db.session import SessionLocal
+from app.pricing import is_suspect, reference_ppg
 from app.search_collector import (
     scan_direct_aliexpress,
     scan_direct_amazon,
@@ -107,6 +110,7 @@ def remove_search(session: Session, watch_id: int) -> None:
         raise ServiceError("Caça não encontrada")
     session.query(HuntOffer).filter_by(watch_id=watch_id).delete()
     session.query(SeenOffer).filter_by(watch_id=watch_id).delete()
+    session.query(OfferPrice).filter_by(watch_id=watch_id).delete()
     session.delete(watch)
     session.commit()
 
@@ -148,16 +152,32 @@ def remove_tracked(session: Session, listing_id: int) -> None:
 def build_hunt(session: Session) -> list[dict]:
     rows: list[dict] = []
     for watch in session.scalars(select(SearchWatch).where(SearchWatch.active.is_(True))).all():
-        for o in session.scalars(select(HuntOffer).where(HuntOffer.watch_id == watch.id)).all():
+        offers = session.scalars(select(HuntOffer).where(HuntOffer.watch_id == watch.id)).all()
+        stats = history.stats(session, watch.id)
+        reference = reference_ppg([
+            p for o in offers
+            if o.verified and not o.approximate and o.in_stock is not False
+            and (p := price_per_gb(float(o.price), o.capacity_gb))
+        ])
+        for o in offers:
             price = float(o.price)
+            ppg = price_per_gb(price, o.capacity_gb)
+            key = f"{o.merchant}|{o.name}".lower()
+            st = stats.get(key)
+            suspect = o.approximate and is_suspect(ppg, reference)
             rows.append({
                 "name": o.name, "merchant": o.merchant, "price": price,
-                "capacity_gb": o.capacity_gb, "price_per_gb": price_per_gb(price, o.capacity_gb),
+                "capacity_gb": o.capacity_gb, "price_per_gb": ppg,
                 "lowering_pct": o.lowering_pct, "url": o.url, "query": watch.query,
                 "source": o.source, "verified": o.verified, "in_stock": o.in_stock,
-                "approximate": o.approximate,
+                "approximate": o.approximate, "suspect": suspect,
+                "watch_id": watch.id, "key": key,
+                "history_points": st.points if st else 0,
+                "low_price": st.low if st else None, "high_price": st.high if st else None,
+                "is_lowest": history.is_lowest(price, st),
+                "fake_discount": history.fake_discount(price, o.lowering_pct, st),
                 "seen_at": iso(o.seen_at),
-                "is_deal": should_alert(
+                "is_deal": not suspect and should_alert(
                     price, capacity_gb=o.capacity_gb,
                     target_price=float(watch.target_price) if watch.target_price is not None
                     else None,

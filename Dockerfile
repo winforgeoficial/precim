@@ -7,9 +7,11 @@ RUN npm run build
 
 FROM python:3.12-slim
 WORKDIR /srv
-COPY pyproject.toml ./
+COPY pyproject.toml requirements.lock ./
 COPY backend ./backend
-RUN pip install --no-cache-dir . \
+# versões travadas: uma atualização de biblioteca não quebra o build sem aviso
+RUN pip install --no-cache-dir -r requirements.lock \
+ && pip install --no-cache-dir --no-deps . \
  && playwright install --with-deps chromium \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=painel /web/dist ./frontend/dist

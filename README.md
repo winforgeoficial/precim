@@ -39,6 +39,21 @@ Só ofertas **conferidas** são enviadas ao Telegram; as do Buscapé aparecem ap
   qualquer aberto no navegador não consegue mexer nas suas caças.
 - Textos vindos das lojas são escapados antes de ir ao Telegram (um `<` no título derrubaria o alerta).
 
+### Histórico de preços
+Cada oferta tem o preço registrado a cada mudança (90 dias). O painel mostra mínimo/máximo, um gráfico
+ao clicar em **📈 histórico**, o selo **🏆 menor preço visto** e **🤨 desconto duvidoso** quando o "de/por"
+da loja não bate com o que o precim viu. O alerta no Telegram também avisa quando é o menor preço visto.
+
+### Preço bom demais (AliExpress)
+Oferta de preço *aproximado* com R$/GB abaixo de **metade da mediana** das ofertas conferidas
+(Kabum/Amazon) é marcada **⚠️ preço suspeito** no painel e **não vai ao Telegram** (costuma ser SSD
+com capacidade falsificada ou preço de outra opção do anúncio).
+
+### Backup do banco
+Uma cópia do SQLite por dia (as 7 últimas), em `./backups` no host (`PRECIM_BACKUP_HOST_DIR` muda o local;
+`PRECIM_BACKUP_KEEP` a quantidade). Para restaurar: pare o contêiner e copie um `precim-*.db` para
+dentro do volume como `precim.db`.
+
 Cada varredura envia no máximo **5 alertas** (os de menor R$/GB); o resto sai nas seguintes.
 
 Testados e descartados: Mercado Livre, Pichau, Casas Bahia e Pelando (bloqueiam), Shopee (sem preço sem
@@ -86,6 +101,11 @@ Configure `PRECIM_TELEGRAM_TOKEN` e `PRECIM_TELEGRAM_CHAT_ID` no `.env` para rec
 cp .env.example .env
 docker compose up --build   # http://127.0.0.1:8000/health
 ```
+
+## Dependências
+`requirements.lock` fixa as versões usadas no contêiner (Python 3.12). Para atualizar: em um
+`python:3.12-slim` limpo, `pip install . && pip freeze` (sem o próprio precim), rode os testes e
+substitua o arquivo.
 
 ## Desenvolver
 ```bash

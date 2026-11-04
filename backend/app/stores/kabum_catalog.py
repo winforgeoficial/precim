@@ -14,15 +14,19 @@ from app.matching import matches_terms
 from app.stores.kabum import KabumStore, ParseError
 
 log = logging.getLogger("precim.kabum")
-SITEMAP_URL = "https://www.kabum.com.br/sitemap/hardware.xml"
+SITEMAP_URLS = (  # hardware = SSDs internos; gamer = SSDs externos/de console
+    "https://www.kabum.com.br/sitemap/hardware.xml",
+    "https://www.kabum.com.br/sitemap/gamer.xml",
+)
 PAGE_PAUSE_SECONDS = (3.0, 6.0)  # educado com o site
-MAX_PAGES_PER_CRAWL = 60
+MAX_PAGES_PER_CRAWL = 120  # ~10 min a cada 3 h, com pausas educadas
 
 _LOC = re.compile(r"<loc>([^<]+)</loc>")
 _SSD_SLUG = re.compile(r"/produto/\d+/(?:[a-z0-9-]*-)?ssd(?:-|$)")
 _NOT_A_DRIVE = re.compile(
     r"storage|(?:^|-)nas(?:-|$)|gaveta|case|gabinete|adaptador|suporte|dissipador|cabo|"
-    r"enclosure|docking|duplicador|leitor|kit-")
+    r"enclosure|docking|duplicador|leitor|kit-|"
+    r"(?:^|[-/])(?:console|macbook|notebook|tablet|ipad|dvr|xbox|computador|pc)(?:-|$)")
 _CAP = re.compile(r"(?:^|-)(\d+)(tb|gb)(?:-|$)")
 
 
@@ -61,18 +65,31 @@ def matches(item: CatalogItem, queries: list[str], min_capacity_gb: int | None) 
 
 
 async def fetch_sitemap() -> str:
+    """Junta os sitemaps. Um que falhe é ignorado; só dá erro se todos falharem."""
+    parts: list[str] = []
     async with httpx.AsyncClient(
         headers={"User-Agent": settings.user_agent}, follow_redirects=True, timeout=60
     ) as client:
-        resp = await client.get(SITEMAP_URL)
-        resp.raise_for_status()
-    return resp.text
+        for i, url in enumerate(SITEMAP_URLS):
+            if i:
+                await asyncio.sleep(random.uniform(1.0, 2.0))
+            try:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                parts.append(resp.text)
+            except httpx.HTTPError:
+                log.warning("sitemap da Kabum falhou: %s", url)
+    if not parts:
+        raise httpx.HTTPError("nenhum sitemap da Kabum respondeu")
+    return "\n".join(parts)
 
 
 async def crawl(items: list[CatalogItem]) -> list[Hit]:
     """Confere cada página na loja, com pausas. Página que falha é ignorada."""
     store = KabumStore()
     hits: list[Hit] = []
+    if len(items) > MAX_PAGES_PER_CRAWL:
+        log.warning("Kabum: %d candidatos, lendo só %d", len(items), MAX_PAGES_PER_CRAWL)
     for i, item in enumerate(items[:MAX_PAGES_PER_CRAWL]):
         if i:
             await asyncio.sleep(random.uniform(*PAGE_PAUSE_SECONDS))

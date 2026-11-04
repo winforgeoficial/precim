@@ -14,13 +14,14 @@ from html import escape
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app import health
+from app import health, history
 from app.aggregators import buscape
 from app.alerts import price_per_gb, should_alert
 from app.core.config import settings
 from app.db.models import HuntOffer, SearchWatch, SeenOffer
 from app.matching import matches_terms
 from app.notify.telegram import brl, send_telegram
+from app.pricing import is_suspect, reference_ppg
 from app.stores import aliexpress, amazon, kabum_catalog
 
 log = logging.getLogger("precim.search")
@@ -37,7 +38,7 @@ APPROXIMATE_NOTE = (
 )
 
 
-def format_hit(hit: buscape.Hit) -> str:
+def format_hit(hit: buscape.Hit, lowest: bool = False) -> str:
     # texto vindo das lojas pode ter <, > e &: sem escapar, o Telegram recusa a mensagem
     lines = ["🐷 Achei uma oferta!", f"<b>{escape(hit.name)}</b>", f"🏪 {escape(hit.merchant)}",
              f"💰 {brl(hit.price)}"]
@@ -46,6 +47,8 @@ def format_hit(hit: buscape.Hit) -> str:
         lines.append(f"📏 {brl(ppg)}/GB")
     if hit.lowering_pct:
         lines.append(f"📉 -{hit.lowering_pct:.0f}% de desconto")
+    if lowest:
+        lines.append("🏆 Menor preço que já vi dessa oferta")
     if hit.in_stock is not None:
         lines.append("📦 Em estoque" if hit.in_stock else "⛔ Sem estoque")
     lines.append(VERIFIED_NOTE)  # só ofertas conferidas chegam ao Telegram
@@ -90,6 +93,17 @@ async def _store_and_alert(session: Session, watch: SearchWatch, source: str,
         for h in hits
     )
 
+    history.record(session, watch.id, hits)
+    stats = history.stats(session, watch.id)
+    # referência de mercado = ofertas conferidas na loja (fora as de preço aproximado)
+    reference = reference_ppg([
+        p for o in session.scalars(
+            select(HuntOffer).where(HuntOffer.watch_id == watch.id, HuntOffer.verified.is_(True),
+                                    HuntOffer.approximate.is_(False),
+                                    HuntOffer.in_stock.isnot(False)))
+        if (p := price_per_gb(float(o.price), o.capacity_gb))
+    ])
+
     sent = 0
     # melhores R$/GB primeiro: se houver limite, vão ao grupo as mais interessantes
     for hit in sorted(hits, key=lambda h: (price_per_gb(h.price, h.capacity_gb) is None,
@@ -102,6 +116,10 @@ async def _store_and_alert(session: Session, watch: SearchWatch, source: str,
         if watch.min_capacity_gb and (hit.capacity_gb or 0) < watch.min_capacity_gb:
             continue
         if hit.in_stock is False:  # sem estoque confirmado: lista, mas não avisa
+            continue
+        # preço aproximado bem abaixo das lojas conferidas = quase sempre capacidade/produto falso
+        if hit.approximate and is_suspect(price_per_gb(hit.price, hit.capacity_gb), reference):
+            log.info("preço suspeito não avisado: %s R$%.2f", hit.name[:60], hit.price)
             continue
         if not should_alert(
             hit.price,
@@ -118,7 +136,9 @@ async def _store_and_alert(session: Session, watch: SearchWatch, source: str,
             if (last - hit.price) / last * 100 < MIN_REDROP_PCT:
                 continue
         try:
-            if not await send_telegram(format_hit(hit)):
+            if not await send_telegram(
+                format_hit(hit, lowest=history.is_lowest(hit.price, stats.get(hit.key)))
+            ):
                 continue
         except Exception:
             log.exception("falha ao enviar Telegram")

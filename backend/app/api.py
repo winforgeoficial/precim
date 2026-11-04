@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import health, services
+from app import history as offer_history
 from app.alerts import price_per_gb
 from app.db.models import (
     HuntOffer,
@@ -176,6 +177,12 @@ def hunt(session: Session = Depends(get_db)) -> dict:
     offers = services.build_hunt(session)
     last = session.scalar(select(func.max(HuntOffer.seen_at)))
     return {"offers": offers, "last_scan": _iso(last) if last else None}
+
+
+@router.get("/hunt/history")
+def hunt_history(watch_id: int, key: str, session: Session = Depends(get_db)) -> list[dict]:
+    return [{"at": _iso(p["at"]), "price": p["price"]}
+            for p in offer_history.series(session, watch_id, key)]
 
 
 @router.post("/hunt/run")

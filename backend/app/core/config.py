@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     amazon_enabled: bool = True  # coleta direta da Amazon por navegador automatizado
     aliexpress_enabled: bool = True  # coleta do AliExpress (preço aproximado)
     chromium_path: str = ""  # opcional: caminho de um Chromium já instalado
+    backup_dir: str = ""  # padrão: <pasta do banco>/backups
+    backup_keep: int = 7  # quantas cópias diárias guardar
     user_agent: str = "precim/0.1 (uso pessoal)"
 
 
