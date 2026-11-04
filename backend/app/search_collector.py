@@ -25,8 +25,8 @@ log = logging.getLogger("precim.search")
 QUERY_PAUSE_SECONDS = (3.0, 6.0)  # pausa entre consultas da mesma caça (anti-bot)
 MIN_REDROP_PCT = 3.0  # só re-avisa a mesma oferta se cair ao menos isso
 DIRECT_INTERVAL = timedelta(hours=3)  # coletas diretas são mais pesadas: não rodam a cada varredura
+DUE_SLACK = timedelta(minutes=15)  # varreduras horárias têm jitter; sem folga a coleta pularia p/ 4 h
 
-UNVERIFIED_NOTE = "⚠️ Preço do Buscapé: pode não estar mais disponível na loja"
 VERIFIED_NOTE = "✅ Conferida direto na loja"
 
 
@@ -37,10 +37,10 @@ def format_hit(hit: buscape.Hit) -> str:
     if ppg:
         lines.append(f"📏 {brl(ppg)}/GB")
     if hit.lowering_pct:
-        lines.append(f"📉 -{hit.lowering_pct:.0f}% {'de desconto' if hit.verified else 'no histórico'}")
+        lines.append(f"📉 -{hit.lowering_pct:.0f}% de desconto")
     if hit.in_stock is not None:
         lines.append("📦 Em estoque" if hit.in_stock else "⛔ Sem estoque")
-    lines.append(VERIFIED_NOTE if hit.verified else UNVERIFIED_NOTE)
+    lines.append(VERIFIED_NOTE)  # só ofertas conferidas chegam ao Telegram
     lines.append(hit.url)
     return "\n".join(lines)
 
@@ -81,6 +81,8 @@ async def _store_and_alert(session: Session, watch: SearchWatch, source: str,
 
     sent = 0
     for hit in hits:
+        if not hit.verified:  # Buscapé/Zoom: só aparece no painel, nunca vai ao grupo
+            continue
         if hit.in_stock is False:  # sem estoque confirmado: lista, mas não avisa
             continue
         if not should_alert(
@@ -130,7 +132,7 @@ def _direct_is_due(session: Session, watch: SearchWatch, source: str = "kabum") 
     if last is None:
         return True
     last = last if last.tzinfo else last.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - last >= DIRECT_INTERVAL
+    return datetime.now(timezone.utc) - last >= DIRECT_INTERVAL - DUE_SLACK
 
 
 async def scan_direct_kabum(session: Session, watch: SearchWatch, force: bool = False) -> int:

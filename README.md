@@ -25,12 +25,14 @@ terceiros) já não existem na loja. Por isso cada oferta é rotulada:
 - **⚠️ não verificada** — veio do Buscapé; pode já não estar disponível. O painel tem o filtro
   "Só conferidas na loja" e o Telegram avisa isso em cada mensagem.
 
+Só ofertas **conferidas** são enviadas ao Telegram; as do Buscapé aparecem apenas no painel.
+
 O precim **não clica** nos links de redirecionamento do Buscapé para checar ofertas (são links de
 anúncio pago).
 
 ### Cadência anti-bloqueio
-As varreduras seguem um ciclo rotativo **30 → 50 → 60 min → volta** (mais alguns segundos aleatórios),
-configurável em `PRECIM_SCAN_CYCLE_MINUTES`. Se o Buscapé falhar, o Zoom (mesmos dados) é usado.
+O Buscapé/Zoom é consultado **a cada 1 hora** (mais até 5 min aleatórios), configurável em
+`PRECIM_SCAN_CYCLE_MINUTES` (aceita ciclo, ex.: `30,50,60`). Kabum e Amazon são conferidas a cada 3 h. Se o Buscapé falhar, o Zoom (mesmos dados) é usado.
 
 ### Acompanhar uma busca em agregador
 ```bash

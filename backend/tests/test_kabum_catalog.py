@@ -59,7 +59,7 @@ def _direct_hit(price=500, stock=True):
 
 
 @pytest.mark.asyncio
-async def test_aviso_diferencia_verificada_de_nao_verificada(session, monkeypatch):
+async def test_telegram_so_recebe_ofertas_conferidas(session, monkeypatch):
     sent = []
 
     async def fake_send(text):
@@ -73,12 +73,13 @@ async def test_aviso_diferencia_verificada_de_nao_verificada(session, monkeypatc
 
     await search_collector._store_and_alert(session, watch, "kabum", [_direct_hit()])
     agg = Hit(name="SSD Magalu 960", price=400, merchant="Magazine Luiza", url="u", capacity_gb=960)
-    await search_collector._store_and_alert(session, watch, "buscape", [agg])
+    n = await search_collector._store_and_alert(session, watch, "buscape", [agg])
 
+    assert n == 0 and len(sent) == 1  # a do Buscapé (R$ 400, bem abaixo da meta) NÃO foi ao grupo
     assert search_collector.VERIFIED_NOTE in sent[0] and "Em estoque" in sent[0]
-    assert search_collector.UNVERIFIED_NOTE in sent[1]
     rows = {o.source: o for o in session.scalars(select(HuntOffer)).all()}
-    assert rows["kabum"].verified is True and rows["buscape"].verified is False
+    assert rows["kabum"].verified is True
+    assert rows["buscape"].verified is False  # mas continua listada no painel
 
 
 @pytest.mark.asyncio
@@ -158,3 +159,22 @@ def test_migracao_adiciona_colunas_em_banco_antigo(tmp_path, monkeypatch):
     with engine.connect() as c:
         row = c.execute(text("SELECT source, verified FROM hunt_offers")).one()
     assert row == ("buscape", 0)  # linhas antigas viram "buscapé, não verificada"
+
+
+@pytest.mark.asyncio
+async def test_coleta_direta_nao_pula_para_4h_por_causa_do_jitter(session):
+    from datetime import datetime, timedelta, timezone
+
+    watch = SearchWatch(query="ssd", target_price=900)
+    session.add(watch)
+    session.flush()
+    agora = datetime.now(timezone.utc)
+    session.add(HuntOffer(watch_id=watch.id, name="n", merchant="m", price=1, url="u",
+                          source="kabum", seen_at=agora - timedelta(hours=2, minutes=50)))
+    session.commit()
+    assert search_collector._direct_is_due(session, watch, "kabum") is True  # 2h50 ≈ 3h
+    session.query(HuntOffer).delete()
+    session.add(HuntOffer(watch_id=watch.id, name="n", merchant="m", price=1, url="u",
+                          source="kabum", seen_at=agora - timedelta(hours=2)))
+    session.commit()
+    assert search_collector._direct_is_due(session, watch, "kabum") is False  # 2h: ainda cedo

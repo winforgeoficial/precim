@@ -16,7 +16,8 @@ def session():
 
 
 def _hit(price):
-    return Hit(name="SSD X 1TB", price=price, merchant="Kabum", url="https://x", capacity_gb=1000)
+    return Hit(name="SSD X 1TB", price=price, merchant="Kabum", url="https://x", capacity_gb=1000,
+               verified=True)  # só ofertas conferidas vão ao Telegram
 
 
 @pytest.mark.asyncio

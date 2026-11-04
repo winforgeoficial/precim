@@ -14,3 +14,12 @@ def test_jitter_dentro_do_limite():
 
 def test_parse_cycle():
     assert parse_cycle("30, 50,60") == (30, 50, 60)
+
+
+def test_padrao_e_de_uma_hora_com_jitter_de_ate_5_min():
+    from app.cadence import DEFAULT_CYCLE
+
+    assert DEFAULT_CYCLE == (60,)
+    c = Cadence()
+    for _ in range(30):
+        assert 3600 <= c.next_delay_seconds() <= 3600 + 300
