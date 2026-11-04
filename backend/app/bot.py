@@ -1,5 +1,6 @@
 """Ligação com o Telegram (long polling). Só atende o chat configurado."""
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from html import escape
@@ -8,7 +9,7 @@ from telegram import BotCommand, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from app import bot_logic
+from app import bot_logic, services
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services import ServiceError
@@ -96,13 +97,26 @@ async def _url(session, args) -> str:
     return await bot_logic.cmd_url(session, args)
 
 
+async def _editar(session, args) -> str:
+    text = bot_logic.cmd_editar(session, args)
+    if "zerado" in text:  # termo novo: varre já, para a caça não ficar sem ofertas
+        _, ident = bot_logic.parse_ref(args[0])
+        _background.add(task := asyncio.create_task(services.rescan_watch(ident)))
+        task.add_done_callback(_background.discard)
+        text += "\n🔎 Já estou caçando com a busca nova; os avisos chegam em instantes."
+    return text
+
+
+_background: set[asyncio.Task] = set()
+
+
 def build_application() -> Application:
     app = Application.builder().token(settings.telegram_token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("id", chat_id_cmd))
     table: dict[str, Callable[..., Awaitable[str]]] = {
         "ajuda": _ajuda, "lista": _lista, "resumo": _resumo, "cacar": _cacar, "url": _url,
-        "caca": _sync(bot_logic.cmd_caca), "editar": _sync(bot_logic.cmd_editar), "alvo": _sync(bot_logic.cmd_alvo),
+        "caca": _sync(bot_logic.cmd_caca), "editar": _editar, "alvo": _sync(bot_logic.cmd_alvo),
         "remover": _sync(bot_logic.cmd_remover), "pausar": _sync(bot_logic.cmd_pausar),
         "retomar": _sync(bot_logic.cmd_retomar),
     }

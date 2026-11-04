@@ -16,11 +16,17 @@ from app.db.models import (
     SearchWatch,
     SeenOffer,
 )
+from app.db.session import SessionLocal
 from app.search_collector import scan_search
 from app.stores.registry import store_for_url
 
 MANUAL_HUNT_COOLDOWN = timedelta(minutes=5)  # respeita o anti-bot dos sites
 _last_manual_hunt: datetime | None = None
+
+
+def iso(dt: datetime) -> str:
+    """SQLite devolve datas sem fuso; o banco guarda UTC. O painel precisa do offset."""
+    return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).isoformat()
 
 
 class ServiceError(Exception):
@@ -143,7 +149,7 @@ def build_hunt(session: Session) -> list[dict]:
                 "name": o.name, "merchant": o.merchant, "price": price,
                 "capacity_gb": o.capacity_gb, "price_per_gb": price_per_gb(price, o.capacity_gb),
                 "lowering_pct": o.lowering_pct, "url": o.url, "query": watch.query,
-                "seen_at": o.seen_at.isoformat(),
+                "seen_at": iso(o.seen_at),
                 "is_deal": should_alert(
                     price, capacity_gb=o.capacity_gb,
                     target_price=float(watch.target_price) if watch.target_price is not None
@@ -173,3 +179,11 @@ async def run_manual_hunt(session: Session) -> int:
     for watch in session.scalars(select(SearchWatch).where(SearchWatch.active.is_(True))).all():
         sent += await scan_search(session, watch)
     return sent
+
+
+async def rescan_watch(watch_id: int) -> None:
+    """Varre uma caça agora, em sessão própria (para uso em tarefas de fundo)."""
+    with SessionLocal() as session:
+        watch = session.get(SearchWatch, watch_id)
+        if watch and watch.active:
+            await scan_search(session, watch)

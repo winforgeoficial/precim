@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -25,8 +24,7 @@ def get_db():
         yield session
 
 
-def _aware(dt: datetime) -> datetime:
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+_iso = services.iso
 
 
 # ---------- produtos acompanhados por URL ----------
@@ -74,7 +72,7 @@ def list_watch(session: Session = Depends(get_db)) -> list[dict]:
             "price_per_gb": price_per_gb(float(last.price), product.capacity_gb) if last else None,
             "in_stock": last.in_stock if last else None,
             "target_price": float(alert.target_price) if alert and alert.target_price else None,
-            "updated_at": last.captured_at.isoformat() if last else None,
+            "updated_at": _iso(last.captured_at) if last else None,
         })
     return out
 
@@ -95,7 +93,7 @@ def history(listing_id: int, session: Session = Depends(get_db)) -> list[dict]:
         select(PriceSnapshot).where(PriceSnapshot.listing_id == listing_id)
         .order_by(PriceSnapshot.captured_at)
     ).all()
-    return [{"at": s.captured_at.isoformat(), "price": float(s.price),
+    return [{"at": _iso(s.captured_at), "price": float(s.price),
              "old_price": float(s.old_price) if s.old_price else None} for s in snaps]
 
 
@@ -139,7 +137,10 @@ class SearchPatch(BaseModel):
 
 
 @router.patch("/search-watch/{watch_id}")
-def patch_search_watch(watch_id: int, body: SearchPatch, session: Session = Depends(get_db)) -> dict:
+def patch_search_watch(
+    watch_id: int, body: SearchPatch, background: BackgroundTasks,
+    session: Session = Depends(get_db),
+) -> dict:
     """Só altera o que veio no corpo; enviar null limpa a meta/capacidade."""
     changes = {k: getattr(body, k) for k in body.model_fields_set}
     if changes.get("query") is None:
@@ -150,6 +151,8 @@ def patch_search_watch(watch_id: int, body: SearchPatch, session: Session = Depe
         watch, reset = services.update_search(session, watch_id, **changes)
     except services.ServiceError as exc:
         raise HTTPException(404 if "não encontrada" in str(exc) else 422, str(exc)) from exc
+    if reset and watch.active:
+        background.add_task(services.rescan_watch, watch_id)  # lista não fica vazia
     return {**_search_dict(watch), "history_reset": reset}
 
 
@@ -167,7 +170,7 @@ def delete_search_watch(watch_id: int, session: Session = Depends(get_db)) -> No
 def hunt(session: Session = Depends(get_db)) -> dict:
     offers = services.build_hunt(session)
     last = session.scalar(select(func.max(HuntOffer.seen_at)))
-    return {"offers": offers, "last_scan": last.isoformat() if last else None}
+    return {"offers": offers, "last_scan": _iso(last) if last else None}
 
 
 @router.post("/hunt/run")

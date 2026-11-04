@@ -6,12 +6,14 @@ from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func, select
 
 from app.api import router
 from app.bot import start_bot, stop_bot
 from app.cadence import Cadence, parse_cycle
 from app.collector import scan_all
 from app.core.config import settings
+from app.db.models import HuntOffer
 from app.db.session import SessionLocal, init_db
 from app.search_collector import scan_all_searches
 
@@ -27,8 +29,8 @@ async def _scan_everything() -> None:
         await scan_all_searches(session)
 
 
-def _schedule_next(scheduler: AsyncIOScheduler, cadence: Cadence) -> None:
-    delay = cadence.next_delay_seconds()
+def _schedule_next(scheduler: AsyncIOScheduler, cadence: Cadence, delay: float | None = None) -> None:
+    delay = cadence.next_delay_seconds() if delay is None else delay
     log.info("próxima varredura em %.0f min", delay / 60)
     scheduler.add_job(
         _run_and_reschedule, "date",
@@ -46,12 +48,28 @@ async def _run_and_reschedule(scheduler: AsyncIOScheduler, cadence: Cadence) -> 
         _schedule_next(scheduler, cadence)
 
 
+BOOT_SCAN_DELAY_SECONDS = 45
+RECENT_SCAN = timedelta(minutes=15)  # reinícios seguidos não viram rajada de consultas
+
+
+def _first_delay_seconds(cadence: Cadence) -> float:
+    """Varre logo após subir, a menos que já tenha varrido há pouco."""
+    with SessionLocal() as session:
+        last = session.scalar(select(func.max(HuntOffer.seen_at)))
+    if last is not None:
+        last = last if last.tzinfo else last.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - last < RECENT_SCAN:
+            return cadence.next_delay_seconds()
+    return BOOT_SCAN_DELAY_SECONDS
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     scheduler = AsyncIOScheduler()
     scheduler.start()
-    _schedule_next(scheduler, Cadence(parse_cycle(settings.scan_cycle_minutes)))
+    cadence = Cadence(parse_cycle(settings.scan_cycle_minutes))
+    _schedule_next(scheduler, cadence, _first_delay_seconds(cadence))
     bot = await start_bot()
     yield
     await stop_bot(bot)

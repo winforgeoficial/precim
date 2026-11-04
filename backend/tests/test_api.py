@@ -98,3 +98,27 @@ def test_patch_search_watch(client):
         "min_capacity_gb"] is None
     assert client.patch(f"/api/search-watch/{wid}", json={"target_price": None}).status_code == 422
     assert client.patch("/api/search-watch/999", json={"active": True}).status_code == 404
+
+
+def test_datas_saem_com_fuso(client):
+    wid = client.post("/api/search-watch", json={"query": "ssd", "target_price": 900}).json()["id"]
+    with client.session_factory() as s:
+        s.add(HuntOffer(watch_id=wid, name="SSD", merchant="K", price=100, capacity_gb=500, url="u"))
+        s.commit()
+    data = client.get("/api/hunt").json()
+    assert data["last_scan"].endswith("+00:00")
+    assert data["offers"][0]["seen_at"].endswith("+00:00")
+
+
+def test_patch_de_termo_agenda_rescan(client, monkeypatch):
+    chamadas = []
+
+    async def fake_rescan(watch_id):
+        chamadas.append(watch_id)
+
+    monkeypatch.setattr(services, "rescan_watch", fake_rescan)
+    wid = client.post("/api/search-watch", json={"query": "ssd", "target_price": 900}).json()["id"]
+    client.patch(f"/api/search-watch/{wid}", json={"target_price": 800})  # só meta: sem rescan
+    assert chamadas == []
+    client.patch(f"/api/search-watch/{wid}", json={"query": "ssd nvme"})
+    assert chamadas == [wid]
