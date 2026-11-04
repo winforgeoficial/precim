@@ -9,7 +9,9 @@ FROM python:3.12-slim
 WORKDIR /srv
 COPY pyproject.toml ./
 COPY backend ./backend
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . \
+ && playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=painel /web/dist ./frontend/dist
 ENV PRECIM_DATABASE_URL=sqlite:////data/precim.db
 VOLUME /data

@@ -17,7 +17,7 @@ from app.db.models import (
     SeenOffer,
 )
 from app.db.session import SessionLocal
-from app.search_collector import scan_direct_kabum, scan_search
+from app.search_collector import scan_direct_amazon, scan_direct_kabum, scan_search
 from app.stores.registry import store_for_url
 
 MANUAL_HUNT_COOLDOWN = timedelta(minutes=5)  # respeita o anti-bot dos sites
@@ -190,3 +190,4 @@ async def rescan_watch(watch_id: int) -> None:
         if watch and watch.active:
             await scan_search(session, watch)
             await scan_direct_kabum(session, watch, force=True)
+            await scan_direct_amazon(session, watch, force=True)

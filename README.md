@@ -15,8 +15,13 @@ bloqueiam acesso automatizado** — ficam de fora por ora. **Bot do Telegram** c
 ### Ofertas conferidas × não verificadas
 O Buscapé/Zoom é um agregador: muitas ofertas (principalmente da Magalu, inclusive vendedores
 terceiros) já não existem na loja. Por isso cada oferta é rotulada:
-- **✅ conferida** — preço e estoque lidos direto na página da loja (hoje: **Kabum**, descoberta pelo
+- **✅ conferida** — preço e estoque lidos direto na página da loja (**Kabum**, descoberta pelo
   sitemap público; roda a cada 3 h, com pausas entre páginas).
+- **✅ conferida (Amazon)** — o precim abre a busca da Amazon BR num navegador (Chromium/Playwright)
+  e lê preço e título. Uma página por busca da caça, com pausas de 8–15 s, a cada 3 h. **Sem
+  disfarce**: se a Amazon pedir captcha/verificação, a coleta **para por 12 h** (não há tentativa de
+  contornar). Os termos de uso da Amazon proíbem acesso automatizado — o uso é por sua conta e risco.
+  Desligue com `PRECIM_AMAZON_ENABLED=false`. O preço pode ser de vendedor terceiro.
 - **⚠️ não verificada** — veio do Buscapé; pode já não estar disponível. O painel tem o filtro
   "Só conferidas na loja" e o Telegram avisa isso em cada mensagem.
 

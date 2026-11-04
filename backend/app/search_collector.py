@@ -15,14 +15,16 @@ from sqlalchemy.orm import Session
 
 from app.aggregators import buscape
 from app.alerts import price_per_gb, should_alert
+from app.core.config import settings
 from app.db.models import HuntOffer, SearchWatch, SeenOffer
+from app.matching import matches_terms
 from app.notify.telegram import brl, send_telegram
-from app.stores import kabum_catalog
+from app.stores import amazon, kabum_catalog
 
 log = logging.getLogger("precim.search")
 QUERY_PAUSE_SECONDS = (3.0, 6.0)  # pausa entre consultas da mesma caça (anti-bot)
 MIN_REDROP_PCT = 3.0  # só re-avisa a mesma oferta se cair ao menos isso
-DIRECT_INTERVAL = timedelta(hours=3)  # a coleta direta é mais pesada: não roda a cada varredura
+DIRECT_INTERVAL = timedelta(hours=3)  # coletas diretas são mais pesadas: não rodam a cada varredura
 
 UNVERIFIED_NOTE = "⚠️ Preço do Buscapé: pode não estar mais disponível na loja"
 VERIFIED_NOTE = "✅ Conferida direto na loja"
@@ -122,9 +124,9 @@ async def scan_search(session: Session, watch: SearchWatch) -> int:
     return await _store_and_alert(session, watch, "buscape", hits)
 
 
-def _direct_is_due(session: Session, watch: SearchWatch) -> bool:
+def _direct_is_due(session: Session, watch: SearchWatch, source: str = "kabum") -> bool:
     last = session.scalar(select(func.max(HuntOffer.seen_at)).where(
-        HuntOffer.watch_id == watch.id, HuntOffer.source == "kabum"))
+        HuntOffer.watch_id == watch.id, HuntOffer.source == source))
     if last is None:
         return True
     last = last if last.tzinfo else last.replace(tzinfo=timezone.utc)
@@ -154,10 +156,31 @@ async def scan_direct_kabum(session: Session, watch: SearchWatch, force: bool = 
     return await _store_and_alert(session, watch, "kabum", hits)
 
 
+async def scan_direct_amazon(session: Session, watch: SearchWatch, force: bool = False) -> int:
+    """Fonte 3: lê a busca da Amazon com navegador (a cada 3 h, ou com force)."""
+    if not settings.amazon_enabled or amazon.blocked_now():
+        return 0
+    if not force and not _direct_is_due(session, watch, "amazon"):
+        return 0
+    queries = split_queries(watch.query)
+    try:
+        hits = await amazon.search(queries)
+    except Exception:
+        log.exception("coleta da Amazon falhou")
+        return 0
+    hits = [h for h in hits
+            if (not watch.min_capacity_gb or (h.capacity_gb or 0) >= watch.min_capacity_gb)
+            and matches_terms(h.name, queries)]
+    if not hits:  # bloqueio ou nada relevante: não apaga o que já havia
+        return 0
+    return await _store_and_alert(session, watch, "amazon", hits)
+
+
 async def scan_all_searches(session: Session) -> int:
     watches = session.scalars(select(SearchWatch).where(SearchWatch.active.is_(True))).all()
     sent = 0
     for w in watches:
         sent += await scan_search(session, w)
         sent += await scan_direct_kabum(session, w)
+        sent += await scan_direct_amazon(session, w)
     return sent

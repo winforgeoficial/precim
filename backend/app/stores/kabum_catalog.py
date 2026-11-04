@@ -10,6 +10,7 @@ import httpx
 
 from app.aggregators.buscape import Hit
 from app.core.config import settings
+from app.matching import matches_terms
 from app.stores.kabum import KabumStore, ParseError
 
 log = logging.getLogger("precim.kabum")
@@ -23,9 +24,6 @@ _NOT_A_DRIVE = re.compile(
     r"storage|(?:^|-)nas(?:-|$)|gaveta|case|gabinete|adaptador|suporte|dissipador|cabo|"
     r"enclosure|docking|duplicador|leitor|kit-")
 _CAP = re.compile(r"(?:^|-)(\d+)(tb|gb)(?:-|$)")
-_CAP_TOKEN = re.compile(r"^\d+(?:[.,]\d+)?(?:tb|gb)$")
-# termos da busca que o slug expressa de outro jeito
-_SYNONYMS = {"nvme": ("nvme", "m-2"), "m2": ("m-2",), "m.2": ("m-2",), "sata": ("sata",)}
 
 
 @dataclass(frozen=True)
@@ -59,12 +57,7 @@ def matches(item: CatalogItem, queries: list[str], min_capacity_gb: int | None) 
     """Capacidade mínima + termos não numéricos da busca (ex.: nvme) presentes no slug."""
     if min_capacity_gb and (item.capacity_gb or 0) < min_capacity_gb:
         return False
-    slug = _slug(item.url)
-    for query in queries:
-        tokens = [t.lower() for t in query.split() if t.lower() != "ssd" and not _CAP_TOKEN.match(t.lower())]
-        if all(any(alt in slug for alt in _SYNONYMS.get(t, (t,))) for t in tokens):
-            return True
-    return False
+    return matches_terms(_slug(item.url), queries)
 
 
 async def fetch_sitemap() -> str:
