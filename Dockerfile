@@ -16,4 +16,6 @@ COPY --from=painel /web/dist ./frontend/dist
 ENV PRECIM_DATABASE_URL=sqlite:////data/precim.db
 VOLUME /data
 EXPOSE 8000
+HEALTHCHECK --interval=60s --timeout=6s --start-period=40s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
 CMD ["uvicorn", "app.main:app", "--app-dir", "backend", "--host", "0.0.0.0", "--port", "8000"]

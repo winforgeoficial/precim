@@ -9,10 +9,12 @@ import asyncio
 import logging
 import random
 from datetime import datetime, timedelta, timezone
+from html import escape
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app import health
 from app.aggregators import buscape
 from app.alerts import price_per_gb, should_alert
 from app.core.config import settings
@@ -36,7 +38,8 @@ APPROXIMATE_NOTE = (
 
 
 def format_hit(hit: buscape.Hit) -> str:
-    lines = ["🐷 Achei uma oferta!", f"<b>{hit.name}</b>", f"🏪 {hit.merchant}",
+    # texto vindo das lojas pode ter <, > e &: sem escapar, o Telegram recusa a mensagem
+    lines = ["🐷 Achei uma oferta!", f"<b>{escape(hit.name)}</b>", f"🏪 {escape(hit.merchant)}",
              f"💰 {brl(hit.price)}"]
     ppg = price_per_gb(hit.price, hit.capacity_gb)
     if ppg:
@@ -48,7 +51,7 @@ def format_hit(hit: buscape.Hit) -> str:
     lines.append(VERIFIED_NOTE)  # só ofertas conferidas chegam ao Telegram
     if hit.approximate:
         lines.append(APPROXIMATE_NOTE)
-    lines.append(hit.url)
+    lines.append(escape(hit.url))
     return "\n".join(lines)
 
 
@@ -132,6 +135,8 @@ async def _store_and_alert(session: Session, watch: SearchWatch, source: str,
 async def scan_search(session: Session, watch: SearchWatch) -> int:
     """Fonte 1: agregador (Buscapé/Zoom). Ofertas ficam marcadas como não verificadas."""
     hits = await _collect(watch.query)
+    await health.record(session, "buscape", hits is not None,
+                        None if hits is not None else "todas as consultas falharam")
     if hits is None:
         return 0
     hits = [
@@ -156,8 +161,9 @@ async def scan_direct_kabum(session: Session, watch: SearchWatch, force: bool = 
         return 0
     try:
         items = kabum_catalog.discover(await kabum_catalog.fetch_sitemap())
-    except Exception:
+    except Exception as exc:
         log.exception("sitemap da Kabum falhou")
+        await health.record(session, "kabum", False, f"sitemap: {type(exc).__name__}")
         return 0
     wanted = [i for i in items
               if kabum_catalog.matches(i, split_queries(watch.query), watch.min_capacity_gb)]
@@ -168,6 +174,8 @@ async def scan_direct_kabum(session: Session, watch: SearchWatch, force: bool = 
         session.commit()
         return 0
     hits = await kabum_catalog.crawl(wanted)
+    await health.record(session, "kabum", bool(hits),
+                        None if hits else f"nenhuma das {len(wanted)} páginas foi lida")
     if not hits:  # tudo falhou: mantém o que já havia
         return 0
     return await _store_and_alert(session, watch, "kabum", hits)
@@ -183,9 +191,14 @@ async def _scan_browser_source(session: Session, watch: SearchWatch, source: str
     queries = split_queries(watch.query)
     try:
         hits = await module.search(queries)
-    except Exception:
+    except Exception as exc:
         log.exception("coleta de %s falhou", source)
+        await health.record(session, source, False, f"erro: {type(exc).__name__}")
         return 0
+    if module.blocked_now():  # pediu verificação: o painel mostra "bloqueada"; não conta falha
+        return 0
+    await health.record(session, source, bool(hits),
+                        None if hits else "a busca não devolveu nenhum resultado")
     hits = [h for h in hits
             if (not watch.min_capacity_gb or (h.capacity_gb or 0) >= watch.min_capacity_gb)
             and matches_terms(h.name, queries)]

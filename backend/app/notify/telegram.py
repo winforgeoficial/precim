@@ -1,3 +1,5 @@
+from html import escape
+
 import httpx
 
 from app.core.config import settings
@@ -9,7 +11,7 @@ def brl(value: float) -> str:
 
 def format_alert(name: str, store: str, price: float, old_price: float | None,
                  in_stock: bool | None, ppg: float | None, url: str) -> str:
-    lines = ["🐷 Achei uma oferta!", f"<b>{name}</b>", f"🏪 {store}"]
+    lines = ["🐷 Achei uma oferta!", f"<b>{escape(name)}</b>", f"🏪 {escape(store)}"]
     price_line = f"💰 {brl(price)}"
     if old_price and old_price > price:
         pct = (old_price - price) / old_price * 100
@@ -19,7 +21,7 @@ def format_alert(name: str, store: str, price: float, old_price: float | None,
         lines.append(f"📏 {brl(ppg)}/GB")
     if in_stock is not None:
         lines.append("📦 Em estoque" if in_stock else "⛔ Sem estoque")
-    lines.append(url)
+    lines.append(escape(url))
     return "\n".join(lines)
 
 
@@ -32,5 +34,6 @@ async def send_telegram(text: str) -> bool:
             f"https://api.telegram.org/bot{settings.telegram_token}/sendMessage",
             json={"chat_id": settings.telegram_chat_id, "text": text, "parse_mode": "HTML"},
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:  # a descrição do Telegram não contém o token
+            raise RuntimeError(f"Telegram respondeu {resp.status_code}: {resp.text[:200]}")
     return True

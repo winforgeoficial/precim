@@ -164,7 +164,9 @@ def build_hunt(session: Session) -> list[dict]:
                     max_price_per_gb=watch.max_price_per_gb,
                 ),
             })
-    ppgs = sorted(r["price_per_gb"] for r in rows if r["price_per_gb"])
+    # referência = só o que foi conferido na loja (as do agregador podem ser fantasmas)
+    ppgs = sorted(r["price_per_gb"] for r in rows if r["price_per_gb"] and r["verified"]) or sorted(
+        r["price_per_gb"] for r in rows if r["price_per_gb"])
     for r in rows:
         if r["price_per_gb"] and len(ppgs) > 1:
             cheaper = sum(1 for p in ppgs if p < r["price_per_gb"])

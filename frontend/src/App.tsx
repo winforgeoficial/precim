@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Hunt as HuntData, type Mascot, type SearchWatch, type Tracked as T } from "./api";
+import { api, type Hunt as HuntData, type Mascot, type SearchWatch, type Source, type Tracked as T } from "./api";
 import Header from "./components/Header";
 import Achievements from "./pages/Achievements";
 import Hunt from "./pages/Hunt";
@@ -20,12 +20,13 @@ export default function App() {
   const [mascot, setMascot] = useState<Mascot | null>(null);
   const [tracked, setTracked] = useState<T[]>([]);
   const [searches, setSearches] = useState<SearchWatch[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [h, m, t, s] = await Promise.all([api.hunt(), api.mascot(), api.tracked(), api.searches()]);
-      setHunt(h); setMascot(m); setTracked(t); setSearches(s); setError(null);
+      const [h, m, t, s, src] = await Promise.all([api.hunt(), api.mascot(), api.tracked(), api.searches(), api.sources()]);
+      setHunt(h); setMascot(m); setTracked(t); setSearches(s); setSources(src); setError(null);
     } catch (e) {
       setError(`Não consegui falar com o servidor (${(e as Error).message}).`);
     }
@@ -50,7 +51,7 @@ export default function App() {
         ))}
       </nav>
       <main>
-        {tab === "caca" && <Hunt data={hunt} onRefresh={refresh} />}
+        {tab === "caca" && <Hunt data={hunt} sources={sources} onRefresh={refresh} />}
         {tab === "produtos" && <Tracked items={tracked} onChange={refresh} />}
         {tab === "nova" && <NewHunt searches={searches} onChange={refresh} />}
         {tab === "conquistas" && <Achievements mascot={mascot} />}

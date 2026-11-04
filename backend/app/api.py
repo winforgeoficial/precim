@@ -4,7 +4,7 @@ from pydantic import BaseModel, HttpUrl
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import services
+from app import health, services
 from app.alerts import price_per_gb
 from app.db.models import (
     HuntOffer,
@@ -165,6 +165,11 @@ def delete_search_watch(watch_id: int, session: Session = Depends(get_db)) -> No
 
 
 # ---------- a caça ----------
+
+@router.get("/sources")
+def sources(session: Session = Depends(get_db)) -> list[dict]:
+    return health.snapshot(session)
+
 
 @router.get("/hunt")
 def hunt(session: Session = Depends(get_db)) -> dict:

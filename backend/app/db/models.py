@@ -109,3 +109,16 @@ class HuntOffer(Base):
     in_stock: Mapped[bool | None] = mapped_column(default=None)
     approximate: Mapped[bool] = mapped_column(default=False)  # preço pode ser de outra opção
     seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SourceStatus(Base):
+    """Saúde de cada fonte (Buscapé, Kabum, Amazon, AliExpress): falha silenciosa vira aviso."""
+
+    __tablename__ = "source_status"
+
+    source: Mapped[str] = mapped_column(String(20), primary_key=True)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    consecutive_failures: Mapped[int] = mapped_column(default=0)
+    last_error: Mapped[str | None] = mapped_column(String(300), default=None)
+    warned: Mapped[bool] = mapped_column(default=False)  # já avisei no Telegram desta sequência

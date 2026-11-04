@@ -1,10 +1,31 @@
 import { useState } from "react";
-import { api, brl, type Hunt as HuntData } from "../api";
+import { api, brl, type Hunt as HuntData, type Source } from "../api";
 import Thermometer from "../components/Thermometer";
 
-type Props = { data: HuntData | null; onRefresh: () => void };
+type Props = { data: HuntData | null; sources: Source[]; onRefresh: () => void };
 
-export default function Hunt({ data, onRefresh }: Props) {
+const STATE_STYLE: Record<Source["state"], string> = {
+  ok: "bg-mint/30", falhando: "bg-pig/50", bloqueada: "bg-gold/60", aguardando: "bg-white",
+};
+const STATE_TEXT: Record<Source["state"], string> = {
+  ok: "✓ ok", falhando: "✗ falhando", bloqueada: "⏸ bloqueada (pausa de 12 h)", aguardando: "… aguardando",
+};
+
+function SourceChips({ sources }: { sources: Source[] }) {
+  if (sources.length === 0) return null;
+  return (
+    <ul className="flex flex-wrap gap-2 text-xs" aria-label="Saúde das fontes">
+      {sources.map((s) => (
+        <li key={s.source} className={`rounded-full border-2 border-ink px-2.5 py-0.5 font-bold ${STATE_STYLE[s.state]}`}
+            title={s.detail ?? (s.last_ok_at ? `Última leitura ok: ${new Date(s.last_ok_at).toLocaleString("pt-BR")}` : "Ainda sem leitura")}>
+          {s.label} {STATE_TEXT[s.state]}{s.state === "falhando" ? ` (${s.failures}×)` : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function Hunt({ data, sources, onRefresh }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [onlyVerified, setOnlyVerified] = useState(false);
@@ -41,6 +62,7 @@ export default function Hunt({ data, onRefresh }: Props) {
           {busy ? "Farejando…" : "🔎 Caçar agora"}
         </button>
       </div>
+      <SourceChips sources={sources} />
       {msg && <p className="card bg-gold/30 px-4 py-2 font-semibold" role="status">{msg}</p>}
 
       {all.length > 0 && (
@@ -68,10 +90,12 @@ export default function Hunt({ data, onRefresh }: Props) {
         <ul className="space-y-3">
           {offers.map((o, i) => (
             <li key={`${o.url}-${i}`}
-                className={`card flex flex-wrap items-center gap-x-6 gap-y-2 p-4 ${o.is_deal ? "bg-mint/15" : ""}`}>
+                className={`card flex flex-wrap items-center gap-x-6 gap-y-2 p-4 ${o.is_deal && o.verified ? "bg-mint/15" : ""}`}>
               <div className="min-w-0 flex-1 basis-64">
                 <div className="mb-1 flex flex-wrap gap-1.5">
-                  {o.is_deal && <span className="rounded-full border-2 border-ink bg-mint px-2 text-xs font-bold">OFERTA!</span>}
+                  {o.is_deal && (o.verified
+                    ? <span className="rounded-full border-2 border-ink bg-mint px-2 text-xs font-bold">OFERTA!</span>
+                    : <span className="rounded-full border-2 border-dashed border-ink bg-white px-2 text-xs font-bold" title="Está dentro da sua meta, mas o preço não foi conferido na loja: não gera alerta no grupo.">possível oferta</span>)}
                   {o.verified ? (
                     <span className="rounded-full border-2 border-ink bg-white px-2 text-xs font-bold" title="Preço lido direto na página da loja">✅ conferida</span>
                   ) : (

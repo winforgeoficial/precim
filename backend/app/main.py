@@ -2,9 +2,11 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 
@@ -78,6 +80,17 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="precim", version="0.2.0", lifespan=lifespan)
 app.include_router(router)
+
+
+@app.middleware("http")
+async def same_origin_writes(request: Request, call_next):
+    """Quem escreve (POST/PATCH/DELETE) precisa vir do próprio painel: um site qualquer aberto
+    no navegador não pode mexer nas suas caças."""
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if origin and urlparse(origin).netloc != request.headers.get("host"):
+            return JSONResponse({"detail": "Origem não permitida"}, status_code=403)
+    return await call_next(request)
 
 
 @app.get("/health")

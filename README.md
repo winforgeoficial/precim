@@ -31,6 +31,14 @@ terceiros) já não existem na loja. Por isso cada oferta é rotulada:
 
 Só ofertas **conferidas** são enviadas ao Telegram; as do Buscapé aparecem apenas no painel.
 
+### Saúde das fontes e segurança
+- O painel mostra o estado de cada fonte (ok / falhando / bloqueada). Se uma loja falhar **3
+  varreduras seguidas**, o grupo recebe um aviso (e outro quando ela voltar): falha silenciosa vira alerta.
+- O contêiner tem `HEALTHCHECK`; o painel só escuta em `127.0.0.1`.
+- Escritas na API (criar/editar/apagar) só aceitam requisições da própria origem do painel; um site
+  qualquer aberto no navegador não consegue mexer nas suas caças.
+- Textos vindos das lojas são escapados antes de ir ao Telegram (um `<` no título derrubaria o alerta).
+
 Cada varredura envia no máximo **5 alertas** (os de menor R$/GB); o resto sai nas seguintes.
 
 Testados e descartados: Mercado Livre, Pichau, Casas Bahia e Pelando (bloqueiam), Shopee (sem preço sem

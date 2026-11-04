@@ -15,6 +15,10 @@ export type SearchWatch = {
   id: number; query: string; min_capacity_gb: number | null;
   target_price: number | null; max_price_per_gb: number | null; active: boolean;
 };
+export type Source = {
+  source: string; label: string; state: "ok" | "falhando" | "bloqueada" | "aguardando";
+  last_ok_at: string | null; failures: number; detail: string | null;
+};
 export type Achievement = { id: string; title: string; description: string; unlocked: boolean };
 export type Mascot = {
   level: number; title: string; xp: number; next_at: number | null; progress: number;
@@ -39,6 +43,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   hunt: () => call<Hunt>("/api/hunt"),
   runHunt: () => call<{ alerts_sent: number }>("/api/hunt/run", { method: "POST" }),
+  sources: () => call<Source[]>("/api/sources"),
   mascot: () => call<Mascot>("/api/mascot"),
   tracked: () => call<Tracked[]>("/api/watch"),
   history: (id: number) => call<HistoryPoint[]>(`/api/watch/${id}/history`),
