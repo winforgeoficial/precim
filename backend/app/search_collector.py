@@ -95,6 +95,9 @@ async def _store_and_alert(session: Session, watch: SearchWatch, source: str,
             break
         if not hit.verified:  # Buscapé/Zoom: só aparece no painel, nunca vai ao grupo
             continue
+        # trava final, independente do leitor de cada loja: capacidade tem que estar no range
+        if watch.min_capacity_gb and (hit.capacity_gb or 0) < watch.min_capacity_gb:
+            continue
         if hit.in_stock is False:  # sem estoque confirmado: lista, mas não avisa
             continue
         if not should_alert(

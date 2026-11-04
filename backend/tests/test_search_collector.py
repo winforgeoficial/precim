@@ -109,3 +109,25 @@ async def test_limite_de_alertas_por_varredura_e_ordem_por_rgb(session, monkeypa
 
     n2 = await search_collector._store_and_alert(session, watch, "kabum", hits)
     assert n2 == 3  # as 3 restantes saem na varredura seguinte; as 5 já avisadas não repetem
+
+
+@pytest.mark.asyncio
+async def test_alerta_nunca_sai_com_capacidade_abaixo_do_minimo(session, monkeypatch):
+    sent = []
+
+    async def fake_send(text):
+        sent.append(text)
+        return True
+
+    monkeypatch.setattr(search_collector, "send_telegram", fake_send)
+    watch = SearchWatch(query="ssd", target_price=900, min_capacity_gb=960)
+    session.add(watch)
+    session.commit()
+    pequeno = Hit(name="SSD 128G", price=200, merchant="AliExpress", url="u1", capacity_gb=128,
+                  verified=True)
+    sem_cap = Hit(name="SSD ?", price=200, merchant="AliExpress", url="u2", capacity_gb=None,
+                  verified=True)
+    ok = Hit(name="SSD 1TB", price=800, merchant="AliExpress", url="u3", capacity_gb=1000,
+             verified=True)
+    n = await search_collector._store_and_alert(session, watch, "aliexpress", [pequeno, sem_cap, ok])
+    assert n == 1 and len(sent) == 1 and "SSD 1TB" in sent[0]  # só a de 1TB vai ao grupo

@@ -89,7 +89,10 @@ export default function Hunt({ data, onRefresh }: Props) {
               </div>
               <div className="text-right">
                 <p className="font-display text-2xl font-semibold">{brl(o.price)}</p>
-                <p className="text-sm font-semibold">{o.price_per_gb ? `${brl(o.price_per_gb)}/GB` : "—"}</p>
+                <p className="text-sm font-semibold">
+                  {o.capacity_gb ? `${o.capacity_gb >= 1000 ? `${o.capacity_gb / 1000} TB` : `${o.capacity_gb} GB`} · ` : ""}
+                  {o.price_per_gb ? `${brl(o.price_per_gb)}/GB` : "—"}
+                </p>
               </div>
               <Thermometer quality={o.quality} />
               <a className="btn-ghost" href={o.url} target="_blank" rel="noreferrer noopener">Ver loja ↗</a>
