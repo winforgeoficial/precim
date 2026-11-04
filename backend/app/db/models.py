@@ -104,4 +104,7 @@ class HuntOffer(Base):
     capacity_gb: Mapped[int | None] = mapped_column(default=None)
     lowering_pct: Mapped[float] = mapped_column(default=0.0)
     url: Mapped[str] = mapped_column(String(1000))
+    source: Mapped[str] = mapped_column(String(20), default="buscape")  # buscape | kabum
+    verified: Mapped[bool] = mapped_column(default=False)  # conferida direto na loja
+    in_stock: Mapped[bool | None] = mapped_column(default=None)
     seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

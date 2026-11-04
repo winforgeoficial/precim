@@ -12,6 +12,17 @@ Prontos: coleta direta da **Kabum**, busca por **Buscapé/Zoom** (cobre Amazon, 
 histórico em SQLite e alertas no Telegram. **Pichau e Terabyte não aparecem nos agregadores e
 bloqueiam acesso automatizado** — ficam de fora por ora. **Bot do Telegram** com comandos (abaixo).
 
+### Ofertas conferidas × não verificadas
+O Buscapé/Zoom é um agregador: muitas ofertas (principalmente da Magalu, inclusive vendedores
+terceiros) já não existem na loja. Por isso cada oferta é rotulada:
+- **✅ conferida** — preço e estoque lidos direto na página da loja (hoje: **Kabum**, descoberta pelo
+  sitemap público; roda a cada 3 h, com pausas entre páginas).
+- **⚠️ não verificada** — veio do Buscapé; pode já não estar disponível. O painel tem o filtro
+  "Só conferidas na loja" e o Telegram avisa isso em cada mensagem.
+
+O precim **não clica** nos links de redirecionamento do Buscapé para checar ofertas (são links de
+anúncio pago).
+
 ### Cadência anti-bloqueio
 As varreduras seguem um ciclo rotativo **30 → 50 → 60 min → volta** (mais alguns segundos aleatórios),
 configurável em `PRECIM_SCAN_CYCLE_MINUTES`. Se o Buscapé falhar, o Zoom (mesmos dados) é usado.

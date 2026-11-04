@@ -10,6 +10,7 @@ class Offer:
     old_price: float | None = None
     in_stock: bool | None = None
     stock_qty: int | None = None
+    name: str | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
@@ -13,8 +13,27 @@ engine = create_engine(settings.database_url, connect_args={"check_same_thread":
 SessionLocal = sessionmaker(engine, expire_on_commit=False)
 
 
+# Colunas acrescentadas depois da primeira versão: (tabela, coluna, DDL)
+_ADDED_COLUMNS = [
+    ("hunt_offers", "source", "VARCHAR(20) NOT NULL DEFAULT 'buscape'"),
+    ("hunt_offers", "verified", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("hunt_offers", "in_stock", "BOOLEAN"),
+]
+
+
+def _ensure_columns() -> None:
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, column, ddl in _ADDED_COLUMNS:
+            if table in insp.get_table_names() and column not in {
+                c["name"] for c in insp.get_columns(table)
+            }:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    _ensure_columns()
 
 
 def get_session() -> Session:

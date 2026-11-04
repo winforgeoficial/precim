@@ -30,6 +30,9 @@ class Hit:
     url: str
     capacity_gb: int | None
     lowering_pct: float = 0.0
+    source: str = "buscape"
+    verified: bool = False  # True só quando conferida direto na loja
+    in_stock: bool | None = None
 
     @property
     def key(self) -> str:

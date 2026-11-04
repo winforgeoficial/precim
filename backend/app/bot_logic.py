@@ -197,11 +197,12 @@ def cmd_resumo(session: Session, limit: int = 5) -> str:
         return "Ainda sem ofertas na toca. Crie uma caça com /caca ou use /cacar."
     lines = ["🐷 <b>Melhores ofertas agora</b>"]
     for o in offers:
-        tag = "🔥 " if o["is_deal"] else ""
+        tag = ("🔥 " if o["is_deal"] else "") + ("✅ " if o["verified"] else "⚠️ ")
         ppg = price_per_gb(o["price"], o["capacity_gb"])
         extra = f" · {brl(ppg)}/GB" if ppg else ""
         lines.append(f"{tag}<b>{brl(o['price'])}</b>{extra}\n{escape(o['name'])}\n"
                      f"🏪 {escape(o['merchant'])} — {escape(o['url'])}")
+    lines.append("✅ conferida na loja · ⚠️ preço do Buscapé, pode já não existir")
     return "\n\n".join(lines)
 
 

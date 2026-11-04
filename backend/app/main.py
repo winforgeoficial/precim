@@ -85,6 +85,17 @@ def health() -> dict[str, str]:
     return {"status": "ok", "mascote": "🐷 de olho nas ofertas"}
 
 
+class Painel(StaticFiles):
+    """index.html sempre revalida (senão o navegador segue com o painel antigo após atualizar).
+    Os arquivos em /assets têm hash no nome e podem ficar em cache."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if not path.startswith("assets/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Painel web (build do Vite). Precisa vir por último para não esconder /api e /health.
 if FRONTEND_DIST.is_dir():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="painel")
+    app.mount("/", Painel(directory=FRONTEND_DIST, html=True), name="painel")

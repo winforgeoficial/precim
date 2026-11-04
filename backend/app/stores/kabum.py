@@ -39,6 +39,7 @@ def parse_product_html(html: str, url: str) -> Offer:
         old_price=reference if reference > price else None,
         in_stock=bool(product.get("available")),
         url=url,
+        name=product.get("title"),
     )
 
 

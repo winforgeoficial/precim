@@ -17,7 +17,7 @@ from app.db.models import (
     SeenOffer,
 )
 from app.db.session import SessionLocal
-from app.search_collector import scan_search
+from app.search_collector import scan_direct_kabum, scan_search
 from app.stores.registry import store_for_url
 
 MANUAL_HUNT_COOLDOWN = timedelta(minutes=5)  # respeita o anti-bot dos sites
@@ -149,6 +149,7 @@ def build_hunt(session: Session) -> list[dict]:
                 "name": o.name, "merchant": o.merchant, "price": price,
                 "capacity_gb": o.capacity_gb, "price_per_gb": price_per_gb(price, o.capacity_gb),
                 "lowering_pct": o.lowering_pct, "url": o.url, "query": watch.query,
+                "source": o.source, "verified": o.verified, "in_stock": o.in_stock,
                 "seen_at": iso(o.seen_at),
                 "is_deal": should_alert(
                     price, capacity_gb=o.capacity_gb,
@@ -164,7 +165,8 @@ def build_hunt(session: Session) -> list[dict]:
             r["quality"] = round(100 * (1 - cheaper / (len(ppgs) - 1)))  # 100 = o mais barato
         else:
             r["quality"] = None
-    rows.sort(key=lambda r: (not r["is_deal"], r["price_per_gb"] is None, r["price_per_gb"] or 0))
+    rows.sort(key=lambda r: (not r["is_deal"], not r["verified"], r["price_per_gb"] is None,
+                             r["price_per_gb"] or 0))
     return rows
 
 
@@ -187,3 +189,4 @@ async def rescan_watch(watch_id: int) -> None:
         watch = session.get(SearchWatch, watch_id)
         if watch and watch.active:
             await scan_search(session, watch)
+            await scan_direct_kabum(session, watch, force=True)
