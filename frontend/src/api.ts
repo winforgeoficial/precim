@@ -47,6 +47,8 @@ export const api = {
   searches: () => call<SearchWatch[]>("/api/search-watch"),
   addSearch: (body: Record<string, unknown>) =>
     call<{ id: number }>("/api/search-watch", { method: "POST", body: JSON.stringify(body) }),
+  updateSearch: (id: number, body: Record<string, unknown>) =>
+    call<SearchWatch & { history_reset: boolean }>(`/api/search-watch/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   removeSearch: (id: number) => call<void>(`/api/search-watch/${id}`, { method: "DELETE" }),
 };
 

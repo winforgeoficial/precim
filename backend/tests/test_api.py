@@ -80,3 +80,21 @@ def test_historico_e_remocao(client):
     assert client.delete(f"/api/watch/{lid}").status_code == 204
     assert client.get("/api/watch").json() == []
     assert client.delete(f"/api/watch/{lid}").status_code == 404
+
+
+def test_patch_search_watch(client):
+    wid = client.post("/api/search-watch", json={
+        "query": "ssd nvme 1tb", "target_price": 900, "min_capacity_gb": 1000}).json()["id"]
+    r = client.patch(f"/api/search-watch/{wid}", json={"min_capacity_gb": 960, "active": False})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["min_capacity_gb"] == 960 and body["active"] is False
+    assert body["target_price"] == 900 and body["query"] == "ssd nvme 1tb"  # não tocou no resto
+    assert body["history_reset"] is False
+    r = client.patch(f"/api/search-watch/{wid}", json={"query": "ssd nvme 1tb | ssd nvme 1000gb"})
+    assert r.json()["history_reset"] is True
+    # null limpa a capacidade; remover a última meta é recusado
+    assert client.patch(f"/api/search-watch/{wid}", json={"min_capacity_gb": None}).json()[
+        "min_capacity_gb"] is None
+    assert client.patch(f"/api/search-watch/{wid}", json={"target_price": None}).status_code == 422
+    assert client.patch("/api/search-watch/999", json={"active": True}).status_code == 404

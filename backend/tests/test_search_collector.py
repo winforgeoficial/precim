@@ -55,3 +55,31 @@ async def test_ignora_capacidade_menor(session, monkeypatch):
     session.add(watch)
     session.commit()
     assert await search_collector.scan_search(session, watch) == 0
+
+
+@pytest.mark.asyncio
+async def test_varias_buscas_juntam_e_removem_repetidos(session, monkeypatch):
+    monkeypatch.setattr(search_collector, "QUERY_PAUSE_SECONDS", (0, 0))
+    chamadas = []
+
+    async def fake_search(query):
+        chamadas.append(query)
+        if query == "b":
+            raise RuntimeError("fora do ar")
+        return [_hit(500), _hit(450)] if query == "a" else [_hit(500), _hit(300)]
+
+    monkeypatch.setattr(search_collector.buscape, "search", fake_search)
+    hits = await search_collector._collect("a | b | c")
+    assert chamadas == ["a", "b", "c"]
+    assert sorted(h.price for h in hits) == [300, 450, 500]  # 500 repetido some; "b" falhou, segue
+
+
+@pytest.mark.asyncio
+async def test_todas_as_buscas_falham_retorna_none(monkeypatch):
+    monkeypatch.setattr(search_collector, "QUERY_PAUSE_SECONDS", (0, 0))
+
+    async def fake_search(query):
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(search_collector.buscape, "search", fake_search)
+    assert await search_collector._collect("a | b") is None

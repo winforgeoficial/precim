@@ -1,6 +1,8 @@
 """Varre as buscas em agregadores e avisa só de ofertas novas ou com queda real."""
 
+import asyncio
 import logging
+import random
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -11,6 +13,7 @@ from app.db.models import HuntOffer, SearchWatch, SeenOffer
 from app.notify.telegram import brl, send_telegram
 
 log = logging.getLogger("precim.search")
+QUERY_PAUSE_SECONDS = (3.0, 6.0)  # pausa entre consultas da mesma caça (anti-bot)
 MIN_REDROP_PCT = 3.0  # só re-avisa a mesma oferta se cair ao menos isso
 
 
@@ -26,11 +29,29 @@ def format_hit(hit: buscape.Hit) -> str:
     return "\n".join(lines)
 
 
+def split_queries(query: str) -> list[str]:
+    return [q.strip() for q in query.split("|") if q.strip()]
+
+
+async def _collect(query: str) -> list[buscape.Hit] | None:
+    """Roda cada consulta ("a | b | c"), junta e remove repetidos. None se todas falharem."""
+    merged: dict[tuple[str, float], buscape.Hit] = {}
+    ok = False
+    for i, q in enumerate(split_queries(query)):
+        if i:
+            await asyncio.sleep(random.uniform(*QUERY_PAUSE_SECONDS))
+        try:
+            for hit in await buscape.search(q):
+                merged.setdefault((hit.key, hit.price), hit)
+            ok = True
+        except Exception:
+            log.exception("busca falhou: %s", q)
+    return list(merged.values()) if ok else None
+
+
 async def scan_search(session: Session, watch: SearchWatch) -> int:
-    try:
-        hits = await buscape.search(watch.query)
-    except Exception:
-        log.exception("busca falhou: %s", watch.query)
+    hits = await _collect(watch.query)
+    if hits is None:
         return 0
 
     hits = [

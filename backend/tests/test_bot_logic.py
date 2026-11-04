@@ -174,3 +174,46 @@ async def test_id_responde_para_qualquer_chat(monkeypatch):
     update, msg = _update(-100999)
     await bot.chat_id_cmd(update, SimpleNamespace())
     assert "-100999" in msg.sent[0]
+
+
+def test_editar_so_metas_mantem_historico(session):
+    from app.db.models import SeenOffer
+
+    bot_logic.cmd_caca(session, ["ssd", "nvme", "1tb", "min=1000", "alvo=900"])
+    session.add(SeenOffer(watch_id=1, key="k", last_notified_price=800))
+    session.commit()
+    out = bot_logic.cmd_editar(session, ["c1", "min=960", "alvo=850"])
+    w = session.get(SearchWatch, 1)
+    assert w.min_capacity_gb == 960 and float(w.target_price) == 850 and w.query == "ssd nvme 1tb"
+    assert "zerado" not in out
+    assert session.query(SeenOffer).count() == 1
+
+
+def test_editar_termo_zera_historico_e_aceita_varias_buscas(session):
+    from app.db.models import SeenOffer
+
+    bot_logic.cmd_caca(session, ["ssd", "alvo=900"])
+    session.add(SeenOffer(watch_id=1, key="k", last_notified_price=800))
+    session.commit()
+    out = bot_logic.cmd_editar(session, ["c1", "ssd", "nvme", "1tb", "|", "ssd", "nvme", "1000gb"])
+    assert session.get(SearchWatch, 1).query == "ssd nvme 1tb | ssd nvme 1000gb"
+    assert "zerado" in out and session.query(SeenOffer).count() == 0
+
+
+def test_editar_validacoes(session):
+    bot_logic.cmd_caca(session, ["ssd", "alvo=900"])
+    for bad in ([], ["c1"], ["p1", "alvo=1"], ["c9", "alvo=1"], ["c1", "gb=500"]):
+        with pytest.raises(ServiceError):
+            bot_logic.cmd_editar(session, bad)
+    with pytest.raises(ServiceError):  # remover a única meta
+        bot_logic.cmd_editar(session, ["c1", "alvo=off"])
+    with pytest.raises(ServiceError):  # buscas demais
+        bot_logic.cmd_editar(session, ["c1", "a|b|c|d|e"])
+    assert float(session.get(SearchWatch, 1).target_price) == 900  # nada mudou
+
+
+def test_editar_limpa_uma_meta_quando_ha_outra(session):
+    bot_logic.cmd_caca(session, ["ssd", "alvo=900", "rgb=0,9", "min=500"])
+    bot_logic.cmd_editar(session, ["c1", "alvo=off", "min=off"])
+    w = session.get(SearchWatch, 1)
+    assert w.target_price is None and w.min_capacity_gb is None and w.max_price_per_gb == 0.9

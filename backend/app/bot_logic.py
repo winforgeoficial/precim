@@ -19,13 +19,16 @@ AJUDA = """🐷 <b>Precinho — comandos</b>
 /lista — o que estou caçando e acompanhando
 
 <b>Criar</b>
-/caca <i>termos</i> [min=1000] [alvo=700] [rgb=0,6]
-   ex.: <code>/caca ssd nvme 1tb min=1000 alvo=700</code>
-   min = GB mínimos · alvo = preço-alvo (R$) · rgb = R$/GB máximo
+/caca <i>termos</i> [min=960] [alvo=700] [rgb=0,6]
+   ex.: <code>/caca ssd nvme 1tb | ssd nvme 1000gb min=960 alvo=700</code>
+   min = GB mínimos (1TB conta como 1000 GB) · alvo = preço-alvo (R$) · rgb = R$/GB máximo
+   use <b>|</b> para buscar mais de um termo na mesma caça (até 4)
 /url <i>link-kabum</i> <i>nome</i> [gb=480] [alvo=450] [rgb=0,6]
 
 <b>Gerenciar</b> (use o código da /lista: c1 = caça, p1 = produto)
-/alvo c1 650 — muda o preço-alvo
+/editar c1 min=960 alvo=800 — muda só o que você informar
+   (termos novos trocam a busca; <code>alvo=off</code> remove uma meta)
+/alvo c1 650 — atalho para o preço-alvo
 /pausar c1 · /retomar c1
 /remover c1"""
 
@@ -41,14 +44,17 @@ def _number(raw: str) -> float:
         raise ServiceError(f"“{raw}” não é um número") from exc
 
 
-def parse_options(tokens: list[str]) -> tuple[list[str], dict[str, float]]:
-    """Separa os termos livres das opções chave=valor."""
+_CLEAR = {"off", "-", "nenhum", "nenhuma"}
+
+
+def parse_options(tokens: list[str]) -> tuple[list[str], dict[str, float | None]]:
+    """Separa os termos livres das opções chave=valor (valor "off" limpa a opção)."""
     words: list[str] = []
-    opts: dict[str, float] = {}
+    opts: dict[str, float | None] = {}
     for tok in tokens:
         key, sep, value = tok.partition("=")
         if sep and key.lower() in _KEYS:
-            opts[_KEYS[key.lower()]] = _number(value)
+            opts[_KEYS[key.lower()]] = None if value.lower() in _CLEAR else _number(value)
         else:
             words.append(tok)
     return words, opts
@@ -65,21 +71,24 @@ def _int(v: float | None) -> int | None:
     return int(v) if v is not None else None
 
 
+def describe_search(w: SearchWatch) -> str:
+    goals = []
+    if w.min_capacity_gb:
+        goals.append(f"≥{w.min_capacity_gb} GB")
+    if w.target_price is not None:
+        goals.append(f"até {brl(float(w.target_price))}")
+    if w.max_price_per_gb is not None:
+        goals.append(f"{brl(w.max_price_per_gb)}/GB")
+    pause = "" if w.active else " ⏸"
+    return f"c{w.id} · “{escape(w.query)}” {' · '.join(goals)}{pause}"
+
+
 def cmd_lista(session: Session) -> str:
     lines: list[str] = []
     searches = session.scalars(select(SearchWatch)).all()
     if searches:
         lines.append("<b>🔎 Caças</b>")
-        for w in searches:
-            goals = []
-            if w.min_capacity_gb:
-                goals.append(f"≥{w.min_capacity_gb} GB")
-            if w.target_price is not None:
-                goals.append(f"até {brl(float(w.target_price))}")
-            if w.max_price_per_gb is not None:
-                goals.append(f"{brl(w.max_price_per_gb)}/GB")
-            pause = "" if w.active else " ⏸"
-            lines.append(f"c{w.id} · “{escape(w.query)}” {' · '.join(goals)}{pause}")
+        lines.extend(describe_search(w) for w in searches)
     listings = session.scalars(select(Listing)).all()
     if listings:
         lines.append("\n<b>📈 Produtos</b>")
@@ -113,6 +122,26 @@ async def cmd_url(session: Session, args: list[str]) -> str:
         target_price=opts.get("target_price"), max_price_per_gb=opts.get("max_price_per_gb"))
     now = f"preço agora: {brl(price)}" if price else "ainda sem preço (tento na próxima varredura)"
     return f"Acompanhando p{listing.id}! 🐷 {now}"
+
+
+def cmd_editar(session: Session, args: list[str]) -> str:
+    if not args:
+        raise ServiceError("Uso: /editar c1 [novos termos] [min=960] [alvo=800] [rgb=0,6]")
+    kind, ident = parse_ref(args[0])
+    if kind != "c":
+        raise ServiceError("Para produtos use /alvo p1 450. O /editar é para caças (c1).")
+    words, opts = parse_options(args[1:])
+    if "capacity_gb" in opts:
+        raise ServiceError("Use min= (GB mínimos) para caças. gb= é só para produtos.")
+    changes: dict = {k: (int(v) if k == "min_capacity_gb" and v is not None else v)
+                     for k, v in opts.items()}
+    if words:
+        changes["query"] = " ".join(words)
+    if not changes:
+        raise ServiceError("Nada para mudar. Ex.: /editar c1 min=960 alvo=800")
+    watch, reset = services.update_search(session, ident, **changes)
+    note = "\n🔄 Troquei a busca, então o histórico de ofertas avisadas foi zerado." if reset else ""
+    return f"Caça atualizada ✏️\n{describe_search(watch)}{note}"
 
 
 def cmd_alvo(session: Session, args: list[str]) -> str:

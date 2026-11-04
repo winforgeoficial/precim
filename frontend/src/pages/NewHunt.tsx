@@ -13,6 +13,77 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
+function SearchItem({ s, onChange }: { s: SearchWatch; onChange: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const get = (k: string) => String(f.get(k) ?? "");
+    setErr(null); setNote(null);
+    try {
+      const r = await api.updateSearch(s.id, {
+        query: get("query"), min_capacity_gb: num(get("cap")),
+        target_price: num(get("target")), max_price_per_gb: num(get("ppg")),
+      });
+      setNote(r.history_reset ? "Busca trocada: o histórico de avisos foi zerado." : "Salvo!");
+      setEditing(false);
+      onChange();
+    } catch (ex) {
+      setErr((ex as Error).message);
+    }
+  }
+
+  async function toggle() {
+    await api.updateSearch(s.id, { active: !s.active });
+    onChange();
+  }
+
+  return (
+    <li className={`card px-4 py-2 ${s.active ? "" : "opacity-60"}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-bold">
+          <span className="mr-2 text-xs text-ink/60">c{s.id}</span>“{s.query}”{!s.active && " ⏸"}
+        </span>
+        <span className="text-sm">
+          {s.min_capacity_gb ? `≥ ${s.min_capacity_gb} GB · ` : ""}
+          {s.target_price != null ? `até ${brl(s.target_price)} ` : ""}
+          {s.max_price_per_gb != null ? `· ${brl(s.max_price_per_gb)}/GB` : ""}
+        </span>
+        <span className="flex gap-2">
+          <button className="btn-ghost" onClick={() => setEditing(!editing)} aria-expanded={editing}
+                  aria-label={`Editar caça ${s.query}`}>✏️</button>
+          <button className="btn-ghost" onClick={toggle}
+                  aria-label={`${s.active ? "Pausar" : "Retomar"} caça ${s.query}`}>{s.active ? "⏸" : "▶️"}</button>
+          <button className="btn-ghost" aria-label={`Remover caça ${s.query}`}
+                  onClick={async () => { if (confirm(`Apagar a caça “${s.query}”?`)) { await api.removeSearch(s.id); onChange(); } }}>🗑</button>
+        </span>
+      </div>
+      {note && <p className="mt-1 text-sm font-semibold text-mint" role="status">{note}</p>}
+      {editing && (
+        <form className="mt-3 space-y-3 border-t-2 border-ink/10 pt-3" onSubmit={save}>
+          {err && <p className="card bg-pig/30 px-3 py-1 text-sm font-semibold" role="alert">{err}</p>}
+          <Field label="Busca" hint="Use | para buscar mais de um termo (até 4). Trocar a busca zera o histórico de avisos.">
+            <input name="query" required className="input" defaultValue={s.query} />
+          </Field>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Mín. GB"><input name="cap" inputMode="numeric" className="input" defaultValue={s.min_capacity_gb ?? ""} /></Field>
+            <Field label="Preço-alvo"><input name="target" inputMode="decimal" className="input" defaultValue={s.target_price ?? ""} /></Field>
+            <Field label="Máx. R$/GB"><input name="ppg" inputMode="decimal" className="input" defaultValue={s.max_price_per_gb ?? ""} /></Field>
+          </div>
+          <p className="text-xs text-ink/60">Deixe um campo vazio para remover a meta. Precisa sobrar ao menos preço-alvo ou R$/GB.</p>
+          <div className="flex gap-2">
+            <button className="btn" type="submit">Salvar</button>
+            <button className="btn-ghost" type="button" onClick={() => setEditing(false)}>Cancelar</button>
+          </div>
+        </form>
+      )}
+    </li>
+  );
+}
+
 export default function NewHunt({ searches, onChange }: { searches: SearchWatch[]; onChange: () => void }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -54,9 +125,9 @@ export default function NewHunt({ searches, onChange }: { searches: SearchWatch[
         <form className="card space-y-3 p-4" onSubmit={(e) => submit(e, "search")}>
           <h3 className="font-display text-xl font-semibold">🔎 Caçar por busca</h3>
           <p className="text-sm text-ink/70">Varre Buscapé/Zoom (Amazon, Kabum, Magalu). Avisa quando bater uma das metas.</p>
-          <Field label="O que caçar?"><input name="query" required className="input" placeholder="ssd nvme 1tb" /></Field>
+          <Field label="O que caçar?" hint="Dica: use | para várias buscas, ex.: ssd nvme 1tb | ssd nvme 1000gb"><input name="query" required className="input" placeholder="ssd nvme 1tb" /></Field>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Mín. GB"><input name="cap" inputMode="numeric" className="input" placeholder="1000" /></Field>
+            <Field label="Mín. GB"><input name="cap" inputMode="numeric" className="input" placeholder="960" /></Field>
             <Field label="Preço-alvo"><input name="target" inputMode="decimal" className="input" placeholder="600" /></Field>
             <Field label="Máx. R$/GB"><input name="ppg" inputMode="decimal" className="input" placeholder="0,60" /></Field>
           </div>
@@ -84,18 +155,7 @@ export default function NewHunt({ searches, onChange }: { searches: SearchWatch[
           <p className="text-sm text-ink/70">Nenhuma ainda.</p>
         ) : (
           <ul className="space-y-2">
-            {searches.map((s) => (
-              <li key={s.id} className="card flex flex-wrap items-center justify-between gap-2 px-4 py-2">
-                <span className="font-bold">“{s.query}”</span>
-                <span className="text-sm">
-                  {s.min_capacity_gb ? `≥ ${s.min_capacity_gb} GB · ` : ""}
-                  {s.target_price != null ? `até ${brl(s.target_price)} ` : ""}
-                  {s.max_price_per_gb != null ? `· ${brl(s.max_price_per_gb)}/GB` : ""}
-                </span>
-                <button className="btn-ghost" aria-label={`Remover caça ${s.query}`}
-                        onClick={async () => { await api.removeSearch(s.id); onChange(); }}>🗑</button>
-              </li>
-            ))}
+            {searches.map((s) => <SearchItem key={s.id} s={s} onChange={onChange} />)}
           </ul>
         )}
       </div>

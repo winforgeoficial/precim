@@ -117,13 +117,40 @@ def add_search_watch(body: SearchIn, session: Session = Depends(get_db)) -> dict
     return {"id": watch.id}
 
 
-@router.get("/search-watch")
-def list_search_watch(session: Session = Depends(get_db)) -> list[dict]:
-    return [{
+def _search_dict(w: SearchWatch) -> dict:
+    return {
         "id": w.id, "query": w.query, "min_capacity_gb": w.min_capacity_gb,
         "target_price": float(w.target_price) if w.target_price is not None else None,
         "max_price_per_gb": w.max_price_per_gb, "active": w.active,
-    } for w in session.scalars(select(SearchWatch)).all()]
+    }
+
+
+@router.get("/search-watch")
+def list_search_watch(session: Session = Depends(get_db)) -> list[dict]:
+    return [_search_dict(w) for w in session.scalars(select(SearchWatch)).all()]
+
+
+class SearchPatch(BaseModel):
+    query: str | None = None
+    min_capacity_gb: int | None = None
+    target_price: float | None = None
+    max_price_per_gb: float | None = None
+    active: bool | None = None
+
+
+@router.patch("/search-watch/{watch_id}")
+def patch_search_watch(watch_id: int, body: SearchPatch, session: Session = Depends(get_db)) -> dict:
+    """Só altera o que veio no corpo; enviar null limpa a meta/capacidade."""
+    changes = {k: getattr(body, k) for k in body.model_fields_set}
+    if changes.get("query") is None:
+        changes.pop("query", None)
+    if changes.get("active") is None:
+        changes.pop("active", None)
+    try:
+        watch, reset = services.update_search(session, watch_id, **changes)
+    except services.ServiceError as exc:
+        raise HTTPException(404 if "não encontrada" in str(exc) else 422, str(exc)) from exc
+    return {**_search_dict(watch), "history_reset": reset}
 
 
 @router.delete("/search-watch/{watch_id}", status_code=204)

@@ -10,7 +10,11 @@ import httpx
 from app.core.config import settings
 
 _NEXT = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.DOTALL)
-_CAPACITY = re.compile(r"(\d+(?:[.,]\d+)?)\s*(tb|gb)\b", re.IGNORECASE)
+# número + unidade; aceita "1.000GB" (milhar), "1,5TB"; ignora "GB/s" e colados em outras palavras
+_CAPACITY = re.compile(
+    r"(?<![\d.,])(\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s*(tb|gb)(?![\w/])", re.IGNORECASE)
+_THOUSANDS = re.compile(r"\d{1,3}(?:\.\d{3})+")
+MIN_PLAUSIBLE_GB, MAX_PLAUSIBLE_GB = 16, 100_000
 HOSTS = ("https://www.buscape.com.br", "https://www.zoom.com.br")  # reserva: Zoom
 
 
@@ -33,11 +37,16 @@ class Hit:
 
 
 def parse_capacity_gb(name: str) -> int | None:
-    m = _CAPACITY.search(name)
-    if not m:
-        return None
-    value = float(m.group(1).replace(",", "."))
-    return int(value * 1000) if m.group(2).lower() == "tb" else int(value)
+    """Maior capacidade plausível citada no título (1TB = 1000 GB; "1.000GB 1TB" = 1000)."""
+    found: list[int] = []
+    for m in _CAPACITY.finditer(name):
+        raw = m.group(1)
+        value = float(raw.replace(".", "")) if _THOUSANDS.fullmatch(raw) else float(
+            raw.replace(",", "."))
+        gb = int(value * 1000) if m.group(2).lower() == "tb" else int(value)
+        if MIN_PLAUSIBLE_GB <= gb <= MAX_PLAUSIBLE_GB:
+            found.append(gb)
+    return max(found) if found else None
 
 
 def parse_search_html(html: str, host: str = HOSTS[0]) -> list[Hit]:

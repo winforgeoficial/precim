@@ -33,17 +33,61 @@ class CooldownError(ServiceError):
         self.wait_seconds = wait_seconds
 
 
+MAX_QUERIES_PER_WATCH = 4  # cada consulta extra é mais uma requisição ao site
+
+
+def normalize_query(query: str) -> str:
+    parts = [p.strip() for p in query.split("|") if p.strip()]
+    if not parts:
+        raise ServiceError("Informe o que caçar")
+    if len(parts) > MAX_QUERIES_PER_WATCH:
+        raise ServiceError(f"No máximo {MAX_QUERIES_PER_WATCH} buscas separadas por |")
+    return " | ".join(parts)
+
+
 def add_search(session: Session, *, query: str, min_capacity_gb: int | None = None,
                target_price: float | None = None, max_price_per_gb: float | None = None) -> SearchWatch:
-    if not query.strip():
-        raise ServiceError("Informe o que caçar")
+    query = normalize_query(query)
     if target_price is None and max_price_per_gb is None:
         raise ServiceError("Informe uma meta: preço-alvo ou R$/GB máximo")
-    watch = SearchWatch(query=query.strip(), min_capacity_gb=min_capacity_gb,
+    watch = SearchWatch(query=query, min_capacity_gb=min_capacity_gb,
                         target_price=target_price, max_price_per_gb=max_price_per_gb)
     session.add(watch)
     session.commit()
     return watch
+
+
+_EDITABLE = {"query", "min_capacity_gb", "target_price", "max_price_per_gb", "active"}
+
+
+def update_search(session: Session, watch_id: int, **changes) -> tuple[SearchWatch, bool]:
+    """Altera só os campos informados (None limpa uma meta). Retorna (caça, histórico_zerado).
+
+    Trocar o termo é outra busca: zera ofertas vistas/avisadas. Mudar só metas mantém o histórico.
+    """
+    unknown = set(changes) - _EDITABLE
+    if unknown:
+        raise ServiceError(f"Campo não editável: {', '.join(sorted(unknown))}")
+    watch = session.get(SearchWatch, watch_id)
+    if not watch:
+        raise ServiceError("Caça não encontrada")
+
+    final = {f: getattr(watch, f) for f in _EDITABLE}
+    final.update(changes)
+    final["query"] = normalize_query(final["query"])
+    if final["target_price"] is None and final["max_price_per_gb"] is None:
+        raise ServiceError("A caça precisa de ao menos uma meta (preço-alvo ou R$/GB)")
+    if final["min_capacity_gb"] is not None and final["min_capacity_gb"] < 0:
+        raise ServiceError("Capacidade mínima inválida")
+
+    reset = final["query"] != watch.query
+    for field, value in final.items():
+        setattr(watch, field, value)
+    if reset:
+        session.query(HuntOffer).filter_by(watch_id=watch_id).delete()
+        session.query(SeenOffer).filter_by(watch_id=watch_id).delete()
+    session.commit()
+    return watch, reset
 
 
 def remove_search(session: Session, watch_id: int) -> None:

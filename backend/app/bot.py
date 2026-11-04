@@ -18,7 +18,7 @@ log = logging.getLogger("precim.bot")
 COMMANDS = [
     ("resumo", "Melhores ofertas agora"), ("cacar", "Caçar agora"), ("lista", "O que estou caçando"),
     ("caca", "Criar uma caça por busca"), ("url", "Acompanhar link da Kabum"),
-    ("alvo", "Mudar preço-alvo"), ("pausar", "Pausar"), ("retomar", "Retomar"),
+    ("editar", "Editar uma caça"), ("alvo", "Mudar preço-alvo"), ("pausar", "Pausar"), ("retomar", "Retomar"),
     ("remover", "Remover"), ("ajuda", "Ver comandos"),
 ]
 
@@ -102,7 +102,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("id", chat_id_cmd))
     table: dict[str, Callable[..., Awaitable[str]]] = {
         "ajuda": _ajuda, "lista": _lista, "resumo": _resumo, "cacar": _cacar, "url": _url,
-        "caca": _sync(bot_logic.cmd_caca), "alvo": _sync(bot_logic.cmd_alvo),
+        "caca": _sync(bot_logic.cmd_caca), "editar": _sync(bot_logic.cmd_editar), "alvo": _sync(bot_logic.cmd_alvo),
         "remover": _sync(bot_logic.cmd_remover), "pausar": _sync(bot_logic.cmd_pausar),
         "retomar": _sync(bot_logic.cmd_retomar),
     }
